@@ -21,3 +21,5 @@ Notes: Model is based on similarity and implemented to spacy as pipeline. Model 
 with feedforward network. Model can only distinguish basic contradiction it lacks of syntactic information. 
 Using glove as vectorizer gives good results but padding it to fixed size of vectors takes additional process power instead doc
 vectorizer could be more useful. 
+
+### this project currently based on entailment prediction model described by Parikh et al. (2016). Will be improved using Bert with Bi-Directional LSTM.
