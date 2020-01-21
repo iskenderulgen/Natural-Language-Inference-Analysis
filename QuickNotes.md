@@ -28,6 +28,7 @@ vectorizer could be more useful.
 ### Errors
 
 Invalid reduction dimension 2 for input with 2 dimensions. for 'lambda_2/Sum' (op: 'Sum') with input shapes: [?,1], [] and with computed input tensors: input[1] = <2>.
+
 keras_decom içinde def normalizer 179. satır
 bir üst error ise 100. satır
 
