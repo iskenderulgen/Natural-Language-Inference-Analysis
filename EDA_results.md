@@ -25,3 +25,32 @@ Standart SNLI corpus data type is JSONL and contains following features.
 
 SNLI dev and test data has the same row size. The raw file is fixed as 550,000 train - 10,000 Dev / Test. But some paris has no gold label and for the sake of the NN model we exclude these pairs.
 
+## RAW data file insights
+
+![](images/raw_data.png)
+
+as can be seen from the image raw data has too many feautures which includes pos tags created by using stanford parser. For the simplicity we only select the features that we need.
+
+## Processed data files
+
+In the following image contradiction similart is calculated by using BERT transformer. reason we are excluded the vectors from the JSON file is that BERT creates huge vector that pushes file size up to 6GB. Therefore we only keep similarty result in the last column.
+
+<img src="images/processed_data.png" width="400" height="400" align="center">
+
+# Visualising the similarity results
+It is hard to come to a conclusion from the raw similarity results. even though it yields good measurement of paris similarity, main goal is here to find a higher view of the data. in  the following section you will be seeing boxplots from similarity results.
+
+### SNLI Train Similarity box plot
+
+Following image contains the boxplot results from Train SNLI dataset 
+
+![](images/train_Similarity.png)
+
+Following image contains the boxplot results from Dev SNLI dataset 
+
+![](images/dev_Similarity.png)
+
+Following image contains the boxplot results from Test SNLI dataset 
+
+![](images/test_Similarity.png)
+
