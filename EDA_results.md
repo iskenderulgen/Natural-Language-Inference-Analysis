@@ -46,9 +46,13 @@ Following image contains the boxplot results from Train SNLI dataset
 
 ![](images/train_Similarity.png)
 
+### SNLI Dev Similarity box plot
+
 Following image contains the boxplot results from Dev SNLI dataset 
 
 ![](images/dev_Similarity.png)
+
+### SNLI Test Similarity box plot
 
 Following image contains the boxplot results from Test SNLI dataset 
 
