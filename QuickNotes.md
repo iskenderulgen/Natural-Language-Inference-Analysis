@@ -22,4 +22,15 @@ with feedforward network. Model can only distinguish basic contradiction it lack
 Using glove as vectorizer gives good results but padding it to fixed size of vectors takes additional process power instead doc
 vectorizer could be more useful. 
 
+
+
+
+### Errors
+
+Invalid reduction dimension 2 for input with 2 dimensions. for 'lambda_2/Sum' (op: 'Sum') with input shapes: [?,1], [] and with computed input tensors: input[1] = <2>.
+keras_decom içinde def normalizer 179. satır
+bir üst error ise 100. satır
+
+
+
 #### this project currently based on entailment prediction model described by Parikh et al. (2016). Will be improved using Bert with Bi-Directional LSTM.
