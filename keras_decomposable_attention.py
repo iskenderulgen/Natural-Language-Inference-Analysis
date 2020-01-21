@@ -7,7 +7,7 @@ from keras import backend as K
 
 
 def build_model(vectors, shape, settings):
-    # shape = 50 , 200 , 3
+    # shape = 64 , 200 , 3
     max_length, nr_hidden, nr_class = shape
 
     input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
@@ -73,6 +73,93 @@ def build_model(vectors, shape, settings):
     print("whole model is fine")
     # buraya kadar hersey normal gidiyor modelide cıkartıyor
     return model
+
+
+def build_model_bert(settings):
+    # shape = 64 , 200 , 3
+    max_length = 768
+    nr_hidden = 200
+    nr_class = 3
+
+    input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
+    input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
+
+    # a = layers.Dense(nr_hidden, activation=None, use_bias=False)(input1)
+    # b = layers.Dense(nr_hidden, activation=None, use_bias=False)(input2)
+
+    a = input1
+    b = input2
+    # step 1: attend
+    F = create_feedforward(nr_hidden)
+    att_weights = layers.dot([F(a), F(b)], axes=-1)
+
+    G = create_feedforward(nr_hidden)
+
+    if settings["entail_dir"] == "both":
+        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
+        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
+        alpha = layers.dot([norm_weights_a, a], axes=1)
+        beta = layers.dot([norm_weights_b, b], axes=1)
+
+        # step 2: compare
+        comp1 = layers.concatenate([a, beta])
+        comp2 = layers.concatenate([b, alpha])
+        v1 = layers.TimeDistributed(G)(comp1)
+        v2 = layers.TimeDistributed(G)(comp2)
+
+        # step 3: aggregate
+        v1_sum = layers.Lambda(sum_word)(v1)
+        v2_sum = layers.Lambda(sum_word)(v2)
+        concat = layers.concatenate([v1_sum, v2_sum])
+
+    elif settings["entail_dir"] == "left":
+        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
+        alpha = layers.dot([norm_weights_a, a], axes=1)
+        comp2 = layers.concatenate([b, alpha])
+        v2 = layers.TimeDistributed(G)(comp2)
+        v2_sum = layers.Lambda(sum_word)(v2)
+        concat = v2_sum
+
+    else:
+        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
+        beta = layers.dot([norm_weights_b, b], axes=1)
+        comp1 = layers.concatenate([a, beta])
+        v1 = layers.TimeDistributed(G)(comp1)
+        v1_sum = layers.Lambda(sum_word)(v1)
+        concat = v1_sum
+
+    H = create_feedforward(nr_hidden)
+    out = H(concat)
+    out = layers.Dense(nr_class, activation="softmax")(out)
+
+    model = Model([input1, input2], out)
+
+    model.compile(
+        optimizer=optimizers.Adam(lr=settings["lr"]),
+        loss="categorical_crossentropy",
+        metrics=["accuracy"],
+    )
+    print("whole model is fine")
+    # buraya kadar hersey normal gidiyor modelide cıkartıyor
+    return model
+
+
+def create_embedding_bert(vectors, max_length, projected_dim):
+    return models.Sequential(
+        [
+            layers.Embedding(
+                vectors.shape[0],
+                # 684925 dim for [0]
+                vectors.shape[1],
+                # 300 dim for [1]
+                input_length=max_length,
+                trainable=False,
+            ),
+            layers.TimeDistributed(
+                layers.Dense(projected_dim, activation=None, use_bias=False)
+            ),
+        ]
+    )
 
 
 def create_embedding(vectors, max_length, projected_dim):

@@ -10,15 +10,13 @@ import en_core_web_lg
 import os.path
 import tensorflow as tf
 
+from bert import extract_features
 from keras.utils import to_categorical
-from keras_decomposable_attention import build_model
+from keras_decomposable_attention import build_model, build_model_bert
 from spacy_hook import get_embeddings, KerasSimilarityShim
 from keras import backend as k_backend
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+import pickle
 
 path = "/home/ulgen/Documents/Python_Projects/Contradiction/data/"
 
@@ -41,12 +39,10 @@ def set_keras_backend(backend):
 
 
 set_keras_backend("tensorflow")
+LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
 
-def train(train_loc, dev_loc, shape, settings):
-    train_texts1, train_texts2, train_labels = read_snli(train_loc)
-    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-
+def train(train_loc, dev_loc, shape, settings, bert_path, transformer_type):
     print("Loading spaCy")
     spacy.prefer_gpu()
     gpu = spacy.require_gpu()
@@ -54,36 +50,20 @@ def train(train_loc, dev_loc, shape, settings):
     nlp = en_core_web_lg.load()
 
     assert nlp.path is not None
-    print("Processing texts...")
+    print("Transformer type is = " + transformer_type)
+    train_x, train_labels, dev_x, dev_labels = pre_process(nlp=nlp, shape=shape, bert_dir=bert_path,
+                                                           train_loc=train_loc,
+                                                           dev_loc=dev_loc, transformer=transformer_type)
 
-    if os.path.isfile(path=path + "train_x.pkl"):
-        print("Pre-Processed train file is found now loading")
-        with open(path + 'train_x.pkl', 'rb') as f:
-            train_X = pickle.load(f)
+    if transformer_type == 'spacy':
+        model = build_model(get_embeddings(nlp.vocab), shape, settings)
     else:
-        print("There is no pre-processed file of train_X, Pre-Process will start now")
-        train_X = create_dataset(nlp=nlp, texts=train_texts1, hypotheses=train_texts2, num_unk=100, max_length=shape[0])
-        with open(path + 'train_x.pkl', 'wb') as f:
-            pickle.dump(train_X, f)
-
-    if os.path.isfile(path=path + "dev_x.pkl"):
-        print("Pre-Processed dev file is found now loading")
-        with open(path + 'dev_x.pkl', 'rb') as f:
-            dev_X = pickle.load(f)
-    else:
-        print("There is no pre-processed file of dev_X, Pre-Process will start now")
-        dev_X = create_dataset(nlp=nlp, texts=dev_texts1, hypotheses=dev_texts2, num_unk=100, max_length=shape[0])
-        with open(path + 'dev_x.pkl', 'wb') as f:
-            pickle.dump(dev_X, f)
-
-    model = build_model(get_embeddings(nlp.vocab), shape, settings)
-
-    print(settings)
+        model = build_model_bert(settings)
 
     model.fit(
-        train_X,
+        train_x,
         train_labels,
-        validation_data=(dev_X, dev_labels),
+        validation_data=(dev_x, dev_labels),
         epochs=settings["nr_epoch"],
         batch_size=settings["batch_size"],
         verbose=1
@@ -95,13 +75,71 @@ def train(train_loc, dev_loc, shape, settings):
     weights = model.get_weights()
     # remove the embedding matrix.  We can reconstruct it.
     del weights[1]
-    with (nlp.path / 'similarity' / 'model').open('wb') as file_:
+    with (nlp.path / 'similarity' / 'spacy_model').open('wb') as file_:
         pickle.dump(weights, file_)
-    with (nlp.path / 'similarity' / 'config.json').open('w') as file_:
+    with (nlp.path / 'similarity' / 'spacy_model_config.json').open('w') as file_:
         file_.write(model.to_json())
 
 
-def evaluate(dev_loc, shape):
+def pre_process(nlp, shape, transformer, bert_dir, train_loc, dev_loc):
+    train_texts1, train_texts2, train_labels = read_snli(train_loc)
+    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+
+    if transformer == 'spacy':
+        print("Processing texts using spacy")
+
+        if os.path.isfile(path=path + "Processed_SNLI/Spacy_Processed/train_x.pkl"):
+            print("Pre-Processed train file is found now loading")
+            with open(path + 'Processed_SNLI/Spacy_Processed/train_x.pkl', 'rb') as f:
+                train_x = pickle.load(f)
+        else:
+            print("There is no pre-processed file of train_X, Pre-Process will start now")
+            train_x = create_dataset(nlp=nlp, texts=train_texts1, hypotheses=train_texts2, num_unk=100,
+                                     max_length=shape[0])
+            with open(path + 'Processed_SNLI/Spacy_Processed/train_x.pkl', 'wb') as f:
+                pickle.dump(train_x, f)
+
+        if os.path.isfile(path=path + "Processed_SNLI/Spacy_Processed/dev_x.pkl"):
+            print("Pre-Processed dev file is found now loading")
+            with open(path + 'Processed_SNLI/Spacy_Processed/dev_x.pkl', 'rb') as f:
+                dev_x = pickle.load(f)
+        else:
+            print("There is no pre-processed file of dev_X, Pre-Process will start now")
+            dev_x = create_dataset(nlp=nlp, texts=dev_texts1, hypotheses=dev_texts2, num_unk=100, max_length=shape[0])
+            with open(path + 'Processed_SNLI/Spacy_Processed/dev_x.pkl', 'wb') as f:
+                pickle.dump(dev_x, f)
+        return train_x, train_labels, dev_x, dev_labels
+
+    else:
+        print("Processing texts using bert")
+        if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed/train_x.pkl"):
+            print("Pre-Processed train file is found now loading")
+            with open(path + 'Processed_SNLI/Bert_Processed/train_x.pkl', 'rb') as f:
+                train_x = pickle.load(f)
+        else:
+            print("There is no pre-processed file of train_X, Pre-Process will start now")
+            train_sentences = train_texts1 + train_texts2
+            vectors_train = extract_features.main(bert_dir, input_file=train_sentences)
+            train_x = [np.array(vectors_train[: len(train_texts1)]), np.array(vectors_train[len(train_texts2):])]
+            with open(path + 'Processed_SNLI/Bert_Processed/train_x.pkl', 'wb') as f:
+                pickle.dump(train_x, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed/dev_x.pkl"):
+            print("Pre-Processed dev file is found now loading")
+            with open(path + 'Processed_SNLI/Bert_Processed/dev_x.pkl', 'rb') as f:
+                dev_x = pickle.load(f)
+        else:
+            print("There is no pre-processed file of dev_X, Pre-Process will start now")
+            dev_sentences = dev_texts1 + dev_texts2
+            vectors_dev = extract_features.main(bert_dir, input_file=dev_sentences)
+            dev_x = [np.array(vectors_dev[: len(dev_texts1)]), np.array(vectors_dev[len(dev_texts2):])]
+            with open(path + 'Processed_SNLI/Bert_Processed/dev_x.pkl', 'wb') as f:
+                pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        return np.asarray(train_x), train_labels, np.asarray(dev_x), dev_labels
+
+
+def evaluate(dev_loc, shape, bert_path):
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
     nlp = spacy.load("en_core_web_lg")
     nlp.add_pipe(KerasSimilarityShim.load(nlp.path / "similarity", nlp, shape[0]))
@@ -136,9 +174,6 @@ def demo(shape):
     print("Entailment type:", entailment_type, "(Confidence:", confidence, ")")
 
 
-LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
-
-
 def read_snli(path):
     texts1 = []
     texts2 = []
@@ -157,6 +192,7 @@ def read_snli(path):
 
 def create_dataset(nlp, texts, hypotheses, num_unk, max_length):
     sents = texts + hypotheses
+    # print(sents)
     sents_as_ids = []
 
     print(len(sents))
@@ -167,7 +203,7 @@ def create_dataset(nlp, texts, hypotheses, num_unk, max_length):
         doc = nlp(sent, disable=['parser', 'tagger', 'ner', 'textcat'])
         word_ids = []
         for i, token in enumerate(doc):
-            # i is the id ot token
+            # i indisi work leri tek tek numaralandırıyor bu sayede max lenght ile karsılastırır.
             # skip odd spaces from tokenizer
             if token.has_vector and token.vector_norm == 0:
                 continue
@@ -216,11 +252,13 @@ def create_dataset(nlp, texts, hypotheses, num_unk, max_length):
     ),
 )
 def main(
-        mode="demo",
-        train_loc=path + "snli_1.0_train.jsonl",
-        dev_loc=path + "snli_1.0_dev.jsonl",
-        test_loc=path + "snli_1.0_test.jsonl",
-        max_length=50,
+        mode="train",
+        transformer_type='bert',
+        bert_location=path + "bert/",
+        train_loc=path + "SNLI/snli_train.jsonl",
+        dev_loc=path + "SNLI/snli_dev.jsonl",
+        test_loc=path + "SNLI/snli_test.jsonl",
+        max_length=64,
         nr_hidden=200,
         dropout=0.2,
         learn_rate=0.001,
@@ -241,12 +279,13 @@ def main(
         if train_loc == None or dev_loc == None:
             print("Train mode requires paths to training and development data sets.")
             sys.exit(1)
-        train(train_loc, dev_loc, shape, settings)
+        train(train_loc=train_loc, dev_loc=dev_loc, shape=shape, settings=settings, bert_path=bert_location,
+              transformer_type=transformer_type)
     elif mode == "evaluate":
         if dev_loc == None:
             print("Evaluate mode requires paths to test data set.")
             sys.exit(1)
-        correct, total = evaluate(test_loc, shape)
+        correct, total = evaluate(test_loc, shape, bert_location)
         print(correct, "/", total, correct / total)
     else:
         demo(shape)

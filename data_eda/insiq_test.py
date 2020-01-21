@@ -24,7 +24,7 @@ path = "/home/ulgen/Documents/Python_Projects/Contradiction/data/"
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='SNLI/snli_test.jsonl',
                     help='SNLI main dataset - SNLI/snli_train.jsonl / SNLI/snli_dev.jsonl / SNLI/snli_test.jsonl')
-parser.add_argument('--data_type', type=str, default='Processed_SNLI/train/',
+parser.add_argument('--data_type', type=str, default='Processed_SNLI/test/',
                     help='data type, Processed_SNLI/train/ - Processed_SNLI/test/ or Processed_SNLI/dev/')
 parser.add_argument('--bert_directory', type=str, default=path + "bert/",
                     help='main directory for the bert files')
@@ -37,19 +37,12 @@ def data_splitter(main_path, dataset):
     print(dataframe.show(5))
 
     dataframe.createOrReplaceTempView(name="SNLI")
-    entailment_sentences_df = spark.sql(
-        "SELECT sentence1, gold_label, sentence2 FROM SNLI WHERE gold_label == 'entailment'").toPandas()
-    neutral_sentences_df = spark.sql(
-        "SELECT sentence1, gold_label, sentence2 FROM SNLI WHERE gold_label == 'neutral'").toPandas()
-    contradiction_sentences_df = spark.sql(
-        "SELECT sentence1, gold_label, sentence2 FROM SNLI WHERE gold_label == 'contradiction'").toPandas()
+    clean_dataframe = spark.sql("SELECT sentence1, gold_label, sentence2 FROM SNLI").toPandas()
 
-    get_vectors_and_sims(sentence_pairs=entailment_sentences_df, label_def='entailment')
-    get_vectors_and_sims(sentence_pairs=neutral_sentences_df, label_def='neutral')
-    get_vectors_and_sims(sentence_pairs=contradiction_sentences_df, label_def='contradiction')
+    get_vectors_and_sims(sentence_pairs=clean_dataframe)
 
 
-def get_vectors_and_sims(sentence_pairs, label_def):
+def get_vectors_and_sims(sentence_pairs):
     sent1 = sentence_pairs['sentence1'].to_numpy()
     sent1_vectors = extract_features.main(bert_directory=args.bert_directory, input_file=sent1)
     sentence_pairs.insert(loc=1, column='sentence1_vectors', value=pd.DataFrame(data={'A': sent1_vectors}),
@@ -89,12 +82,10 @@ def plotting(data_dir, data_type):
     print("read")
 
     fig1, ax1 = plt.subplots()
-    ax1.set_title(data_type + 'similarity_plots')
+    ax1.set_title('similarity_plots')
     plt.boxplot(x=[contra_sim, entail_sim, neutral_sim], labels=['contradiction', 'entailment', 'neutral'],
                 manage_ticks=True, autorange=True, meanline=True)
-    plt.savefig(path + data_type + 'Similarity.png', bbox_inches='tight')
     plt.show()
-
 
 
 if __name__ == "__main__":
