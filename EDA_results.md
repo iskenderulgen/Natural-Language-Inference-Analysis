@@ -58,3 +58,6 @@ Following image contains the boxplot results from Test SNLI dataset
 
 ![](images/test_Similarity.png)
 
+
+
+As can be seen from the boxplot result it is really hard to make a conclusion from similarity results. Majority of the data is out of bond and most of the rest is clustered in to very similary range. Therefore more advanced approaches are needed. With these information we will be creating a similary network that learns from SNLI corpus and we will extend this network by combining SNLI - XNLI and other entailment datasets.
