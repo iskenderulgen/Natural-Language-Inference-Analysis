@@ -39,7 +39,7 @@ In the following image contradiction similart is calculated by using BERT transf
 
 <img src="images/processed_data.png" width="400" height="400" align="center">
 
-# Visualising the similarity results
+## Visualising the similarity results
 It is hard to come to a conclusion from the raw similarity results. even though it yields good measurement of paris similarity, main goal is here to find a higher view of the data. in  the following section you will be seeing boxplots from similarity results.
 
 ### SNLI Train Similarity box plot
@@ -82,7 +82,7 @@ Standart MNLI corpus data type is JSONL and contains following features.
 * Raw json file is 9 MB of data
 ```
 
-# Visualising the similarity results
+## Visualising the similarity results
 It is hard to come to a conclusion from the raw similarity results. even though it yields good measurement of paris similarity, main goal is here to find a higher view of the data. in  the following section you will be seeing boxplots from similarity results.
 
 ### SNLI Train Similarity box plot
