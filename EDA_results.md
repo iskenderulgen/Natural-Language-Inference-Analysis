@@ -1,5 +1,7 @@
 # This file contains Exploratory Data Analysis Results
 
+# SNLI RESULTS
+
 SNLI corpus is hand crafted entailment - contradiction corpus that created by stanford university researchers. Raw SNLI corpus is human-labeled using 5 annotators as (Contradiction - Entailment - Neutral). The gold label is the mean of the human labels.
 Standart SNLI corpus data type is JSONL and contains following features.
 
@@ -58,6 +60,48 @@ Following image contains the boxplot results from Test SNLI dataset
 
 ![](images/SNLI_test_Similarity.png)
 
+# MNLI RESULTS
 
+MNLI corpus is hand crafted entailment - contradiction corpus that created by stanford university researchers. Raw MNLI corpus is human-labeled using 5 annotators as (Contradiction - Entailment - Neutral). The gold label is the mean of the human labels.
+Standart MNLI corpus data type is JSONL and contains following features.
+
+### MNLI Train JSONL
+```
+* SNLI_train.JSONL ->  is 392702 rows combined of sentence pairs (it has sentece - gold label - labels and POS tags)
+* Raw json file is 492 MB of data
+```
+
+### MNLI Dev JSONL
+```
+* SNLI_dev.JSONL ->  is 9842 rows combined of sentence pairs (it has sentece - gold label - labels and POS tags)
+* Raw json file is 9 MB of data
+```
+### MNLI Test JSONL
+```
+* SNLI_dev.JSONL ->  is 9842 rows combined of sentence pairs (it has sentece - gold label - labels and POS tags)
+* Raw json file is 9 MB of data
+```
+
+# Visualising the similarity results
+It is hard to come to a conclusion from the raw similarity results. even though it yields good measurement of paris similarity, main goal is here to find a higher view of the data. in  the following section you will be seeing boxplots from similarity results.
+
+### SNLI Train Similarity box plot
+
+Following image contains the boxplot results from Train SNLI dataset 
+
+![](images/MNLI_train_Similarity.png)
+
+### SNLI Dev Similarity box plot
+
+Following image contains the boxplot results from Dev SNLI dataset 
+
+![](images/MNLI_dev_Similarity.png)
+
+### SNLI Test Similarity box plot
+
+Following image contains the boxplot results from Test SNLI dataset 
+
+![](images/MNLI_test_Similarity.png)
 
 As can be seen from the boxplot result it is really hard to make a conclusion from similarity results. Majority of the data is out of bond and most of the rest is clustered in to very similary range. Therefore more advanced approaches are needed. With these information we will be creating a similary network that learns from SNLI corpus and we will extend this network by combining SNLI - XNLI and other entailment datasets.
+
