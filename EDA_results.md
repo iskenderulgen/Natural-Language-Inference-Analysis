@@ -87,21 +87,21 @@ It is hard to come to a conclusion from the raw similarity results. even though 
 
 ### SNLI Train Similarity box plot
 
-Following image contains the boxplot results from Train SNLI dataset 
+Following image contains the boxplot results from Train MNLI dataset 
 
-![](images/MNLI_train_Similarity.png)
+![](images/MNLI_Train_Similarity.png)
 
 ### SNLI Dev Similarity box plot
 
-Following image contains the boxplot results from Dev SNLI dataset 
+Following image contains the boxplot results from Dev MNLI dataset 
 
 ![](images/MNLI_dev_Similarity.png)
 
 ### SNLI Test Similarity box plot
 
-Following image contains the boxplot results from Test SNLI dataset 
+Following image contains the boxplot results from Test MNLI dataset 
 
 ![](images/MNLI_test_Similarity.png)
 
-As can be seen from the boxplot result it is really hard to make a conclusion from similarity results. Majority of the data is out of bond and most of the rest is clustered in to very similary range. Therefore more advanced approaches are needed. With these information we will be creating a similary network that learns from SNLI corpus and we will extend this network by combining SNLI - XNLI and other entailment datasets.
+As can be seen from the boxplot result it is really hard to make a conclusion from similarity results. Majority of the data is out of bond and most of the rest is clustered in to very similary range. Therefore more advanced approaches are needed. With these information we will be creating a similary network that learns from SNLI / MNLI corpus and we will extend this network by combining SNLI - MNLI and other entailment datasets.
 
