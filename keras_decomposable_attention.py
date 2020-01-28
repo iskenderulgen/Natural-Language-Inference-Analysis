@@ -11,14 +11,19 @@ def build_model(vectors, shape, settings):
     max_length, nr_hidden, nr_class = shape
 
     input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
+    print("input 1 is :", K.shape(input1))
     input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
+    print("input 2 is :", K.shape(input2))
 
     # embeddings (projected)
     # vector shape is [684,825 , 300]
     embed = create_embedding(vectors, max_length, nr_hidden)
+    print("embed is :", embed)
 
     a = embed(input1)
+    print("a is :", K.shape(a))
     b = embed(input2)
+    print("b is :", K.shape(b))
 
     # step 1: attend
     F = create_feedforward(nr_hidden)
@@ -75,20 +80,31 @@ def build_model(vectors, shape, settings):
     return model
 
 
-def build_model_bert(settings):
-    # shape = 64 , 200 , 3
-    max_length = 768
-    nr_hidden = 200
-    nr_class = 3
+def build_model_bert(shape, settings):
+    # shape = 768 , 200 , 3
+    max_length, nr_hidden, nr_class = shape
+    # max_length = 768
+    # nr_hidden = 200
+    # nr_class = 3
 
     input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
+    print("input 1 is : ", input1)
+    print("input 1 shape is :", K.shape(input1))
+
     input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
+    print("input 2 is : ", input2)
+    print("input 2 shape is :", K.shape(input2))
 
-    # a = layers.Dense(nr_hidden, activation=None, use_bias=False)(input1)
-    # b = layers.Dense(nr_hidden, activation=None, use_bias=False)(input2)
+    bert = bert_seq(projected_dim=nr_hidden)
 
-    a = input1
-    b = input2
+    a = bert(input1)
+    print("a is : ", a)
+    print("a shape is :", K.shape(a))
+
+    b = bert(input2)
+    print("b is : ", b)
+    print("b shape is :", K.shape(b))
+
     # step 1: attend
     F = create_feedforward(nr_hidden)
     att_weights = layers.dot([F(a), F(b)], axes=-1)
@@ -142,20 +158,40 @@ def build_model_bert(settings):
     print("whole model is fine")
     # buraya kadar hersey normal gidiyor modelide cıkartıyor
     return model
+
+
+def bert_seq(projected_dim):
+    return models.Sequential(
+        [
+            layers.Reshape(
+                (1, 768), input_shape=(768,)
+            ),
+            layers.TimeDistributed(
+                layers.Dense(projected_dim, activation=None, use_bias=False),
+                input_shape=(768,)
+            ),
+        ]
+    )
+
 
 def create_embedding(vectors, max_length, projected_dim):
     return models.Sequential(
         [
             layers.Embedding(
-                vectors.shape[0],
+                # input_dimm (size of vocab)
                 # 684925 dim for [0]
+                vectors.shape[0],
+                # output dim (300 dim vector)
+                # 300 dim for [1] (dim per word)
                 vectors.shape[1],
-                # 300 dim for [1]
+                # max sequence length (64 words max)
                 input_length=max_length,
                 weights=[vectors],
                 trainable=False,
             ),
             layers.TimeDistributed(
+                # 200 dim projected layer
+                # turns (?,64,300) layer to (?,64,200)
                 layers.Dense(projected_dim, activation=None, use_bias=False)
             ),
         ]

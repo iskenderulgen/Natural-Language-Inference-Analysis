@@ -58,7 +58,7 @@ def train(train_loc, dev_loc, shape, settings, bert_path, transformer_type):
     if transformer_type == 'spacy':
         model = build_model(get_embeddings(nlp.vocab), shape, settings)
     else:
-        model = build_model_bert(settings)
+        model = build_model_bert(shape=shape, settings=settings)
 
     model.fit(
         train_x,
@@ -136,7 +136,7 @@ def pre_process(nlp, shape, transformer, bert_dir, train_loc, dev_loc):
             with open(path + 'Processed_SNLI/Bert_Processed/dev_x.pkl', 'wb') as f:
                 pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-        return np.asarray(train_x), train_labels, np.asarray(dev_x), dev_labels
+        return train_x, train_labels, dev_x, dev_labels
 
 
 def evaluate(dev_loc, shape, bert_path):
@@ -258,11 +258,11 @@ def main(
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=64,
-        nr_hidden=200,
+        max_length=768,  # 64 for spacy
+        nr_hidden=400, # 200
         dropout=0.2,
-        learn_rate=0.001,
-        batch_size=1024,
+        learn_rate=0.0001,  # 0.001
+        batch_size=128,
         nr_epoch=10,
         entail_dir="both",
 ):
