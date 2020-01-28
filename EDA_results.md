@@ -44,19 +44,19 @@ It is hard to come to a conclusion from the raw similarity results. even though 
 
 Following image contains the boxplot results from Train SNLI dataset 
 
-![](images/train_Similarity.png)
+![](images/SNLI_train_Similarity.png)
 
 ### SNLI Dev Similarity box plot
 
 Following image contains the boxplot results from Dev SNLI dataset 
 
-![](images/dev_Similarity.png)
+![](images/SNLI_dev_Similarity.png)
 
 ### SNLI Test Similarity box plot
 
 Following image contains the boxplot results from Test SNLI dataset 
 
-![](images/test_Similarity.png)
+![](images/SNLI_test_Similarity.png)
 
 
 
