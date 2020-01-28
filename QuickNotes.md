@@ -29,3 +29,11 @@ vectorizer could be more useful.
 * 549367/549367 [==============================] 
 * 38s 70us/step - loss: 0.6105 - acc: 0.7454 - val_loss: 0.6051 - val_acc: 0.7484
 * Saving to /home/ulgen/anaconda3/envs/python36/lib/python3.6/site-packages/en_core_web_lg/en_core_web_lg-2.2.5/similarity
+
+| lr            | hidden        | batch | Acc  |
+| ------------- |:-------------:| -----:| ----:|
+| 0.001         | 200           | 1024  | 33   |
+| 0.00001       | 200           | 1024  | 70   |
+| 0.00001       | 200           | 512   | 72   |
+| 0.00001       | 200           | 64    | 72   |
+| 0.00001       | 400           | 128   | 74   |
