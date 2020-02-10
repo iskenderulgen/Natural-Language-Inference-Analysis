@@ -22,7 +22,7 @@ with feedforward network. Model can only distinguish basic contradiction it lack
 Using glove as vectorizer gives good results but padding it to fixed size of vectors takes additional process power instead doc
 vectorizer could be more useful. 
 
-# Experimental Results using BERT
+# Experimental Results using BERT sentence based approach 
 
 ## Train Result
 
@@ -37,3 +37,11 @@ vectorizer could be more useful.
 | 0.00001       | 200           | 512   | 72   |
 | 0.00001       | 200           | 64    | 72   |
 | 0.00001       | 400           | 128   | 74   |
+
+# Experimental Results using BERT word based approach
+
+## Train Results
+
+* 549367/549367 [==============================] 
+* 107s 195us/step - loss: 0.4935 - acc: 0.8064 - val_loss: 0.4377 - val_acc: 0.8316
+* Saving to /home/ulgen/anaconda3/envs/python36/lib/python3.6/site-packages/en_core_web_lg/en_core_web_lg-2.2.5/similarity
