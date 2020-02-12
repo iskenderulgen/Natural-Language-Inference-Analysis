@@ -119,61 +119,6 @@ def pre_process(nlp, shape, transformer, bert_dir, train_loc, dev_loc):
                 pickle.dump(dev_x, f)
         return train_x, train_labels, dev_x, dev_labels
 
-    if transformer == 'bert_sentence':
-        print("Processing texts using bert")
-        if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed_Sentence/train_x.pkl"):
-            print("Pre-Processed train file is found now loading")
-            with open(path + 'Processed_SNLI/Bert_Processed_Sentence/train_x.pkl', 'rb') as f:
-                train_x = pickle.load(f)
-        else:
-            print("There is no pre-processed file of train_X, Pre-Process will start now")
-            train_sentences = train_texts1 + train_texts2
-            vectors_train = sentence_transformer(bert_directory=bert_dir,input_file=train_sentences)
-            train_x = [np.array(vectors_train[: len(train_texts1)]), np.array(vectors_train[len(train_texts2):])]
-            with open(path + 'Processed_SNLI/Bert_Processed_Sentence/train_x.pkl', 'wb') as f:
-                pickle.dump(train_x, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-        if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed_Sentence/dev_x.pkl"):
-            print("Pre-Processed dev file is found now loading")
-            with open(path + 'Processed_SNLI/Bert_Processed_Sentence/dev_x.pkl', 'rb') as f:
-                dev_x = pickle.load(f)
-        else:
-            print("There is no pre-processed file of dev_X, Pre-Process will start now")
-            dev_sentences = dev_texts1 + dev_texts2
-            vectors_dev = sentence_transformer(bert_directory=bert_dir, input_file=dev_sentences)
-            dev_x = [np.array(vectors_dev[: len(dev_texts1)]), np.array(vectors_dev[len(dev_texts2):])]
-            with open(path + 'Processed_SNLI/Bert_Processed_Sentence/dev_x.pkl', 'wb') as f:
-                pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-    # if transformer == 'bert_word':
-    #
-    #     print("Processing texts using bert")
-    #     if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed_WordLevel/train_x.pkl"):
-    #         print("Pre-Processed train file is found now loading")
-    #         with open(path + 'Processed_SNLI/Bert_Processed_WordLevel/train_x.pkl', 'rb') as f:
-    #             train_x = pickle.load(f)
-    #     else:
-    #         print("There is no pre-processed file of train_X, Pre-Process will start now")
-    #         train_sentences = train_texts1 + train_texts2
-    #         train_ids = word_transformer(bert_directory=bert_dir, input_file=train_sentences)
-    #         train_x = [np.array(train_ids[: len(train_texts1)]), np.array(train_ids[len(train_texts2):])]
-    #         with open(path + 'Processed_SNLI/Bert_Processed_WordLevel/train_x.pkl', 'wb') as f:
-    #             pickle.dump(train_x, f, protocol=pickle.HIGHEST_PROTOCOL)
-    #
-    #     if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed_WordLevel/dev_x.pkl"):
-    #         print("Pre-Processed dev file is found now loading")
-    #         with open(path + 'Processed_SNLI/Bert_Processed_WordLevel/dev_x.pkl', 'rb') as f:
-    #             dev_x = pickle.load(f)
-    #     else:
-    #         print("There is no pre-processed file of dev_X, Pre-Process will start now")
-    #         dev_sentences = dev_texts1 + dev_texts2
-    #         vectors_dev = word_transformer(bert_directory=bert_dir, input_file=dev_sentences)
-    #         dev_x = [np.array(vectors_dev[: len(dev_texts1)]), np.array(vectors_dev[len(dev_texts2):])]
-    #         with open(path + 'Processed_SNLI/Bert_Processed_WordLevel/dev_x.pkl', 'wb') as f:
-    #             pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-    return train_x, train_labels, dev_x, dev_labels
-
 
 def evaluate(dev_loc, shape, bert_path):
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
