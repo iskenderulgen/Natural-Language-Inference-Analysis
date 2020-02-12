@@ -6,7 +6,7 @@ from keras import layers, Model, models, optimizers
 from keras import backend as K
 
 
-def build_model(vectors, shape, settings):
+def build_model_word_based(vectors, shape, settings):
     # shape = 64 , 200 , 3
     max_length, nr_hidden, nr_class = shape
 
@@ -16,7 +16,8 @@ def build_model(vectors, shape, settings):
     print("input 2 is :", K.shape(input2))
 
     # embeddings (projected)
-    # vector shape is [684,825 , 300]
+    # vector shape is [684,825 , 300] -> for spacy
+    # vector shape is [35,622 , 768] -> for bert
     embed = create_embedding(vectors, max_length, nr_hidden)
     print("embed is :", embed)
 
@@ -79,89 +80,7 @@ def build_model(vectors, shape, settings):
     # buraya kadar hersey normal gidiyor modelide cıkartıyor
     return model
 
-
-def build_model_bert_word(word_vecs, shape, settings):
-    # shape = 64 , 200 , 3
-    print("shape is", shape)
-    max_length, nr_hidden, nr_class = shape
-    # max_length = 64
-    # nr_hidden = 200
-    # nr_class = 3
-
-    input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
-    print("input 1 is : ", input1)
-    print("input 1 shape is :", K.shape(input1))
-
-    input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
-    print("input 2 is : ", input2)
-    print("input 2 shape is :", K.shape(input2))
-
-    embed = create_embedding(vectors=word_vecs, max_length=max_length, projected_dim=nr_hidden)
-
-    a = embed(input1)
-    print("a is : ", a)
-    print("a shape is :", K.shape(a))
-
-    b = embed(input2)
-    print("b is : ", b)
-    print("b shape is :", K.shape(b))
-
-    # step 1: attend
-    F = create_feedforward(nr_hidden)
-    att_weights = layers.dot([F(a), F(b)], axes=-1)
-
-    G = create_feedforward(nr_hidden)
-
-    if settings["entail_dir"] == "both":
-        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
-        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
-        alpha = layers.dot([norm_weights_a, a], axes=1)
-        beta = layers.dot([norm_weights_b, b], axes=1)
-
-        # step 2: compare
-        comp1 = layers.concatenate([a, beta])
-        comp2 = layers.concatenate([b, alpha])
-        v1 = layers.TimeDistributed(G)(comp1)
-        v2 = layers.TimeDistributed(G)(comp2)
-
-        # step 3: aggregate
-        v1_sum = layers.Lambda(sum_word)(v1)
-        v2_sum = layers.Lambda(sum_word)(v2)
-        concat = layers.concatenate([v1_sum, v2_sum])
-
-    elif settings["entail_dir"] == "left":
-        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
-        alpha = layers.dot([norm_weights_a, a], axes=1)
-        comp2 = layers.concatenate([b, alpha])
-        v2 = layers.TimeDistributed(G)(comp2)
-        v2_sum = layers.Lambda(sum_word)(v2)
-        concat = v2_sum
-
-    else:
-        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
-        beta = layers.dot([norm_weights_b, b], axes=1)
-        comp1 = layers.concatenate([a, beta])
-        v1 = layers.TimeDistributed(G)(comp1)
-        v1_sum = layers.Lambda(sum_word)(v1)
-        concat = v1_sum
-
-    H = create_feedforward(nr_hidden)
-    out = H(concat)
-    out = layers.Dense(nr_class, activation="softmax")(out)
-
-    model = Model([input1, input2], out)
-
-    model.compile(
-        optimizer=optimizers.Adam(lr=settings["lr"]),
-        loss="categorical_crossentropy",
-        metrics=["accuracy"],
-    )
-    print("whole model is fine")
-    # buraya kadar hersey normal gidiyor modelide cıkartıyor
-    return model
-
-
-def build_model_bert(shape, settings):
+def build_model_sentence_based(shape, settings):
     # shape = 768 , 200 , 3
     max_length, nr_hidden, nr_class = shape
     # max_length = 768
@@ -307,7 +226,7 @@ def test_build_model():
     vectors = np.ndarray((100, 8), dtype="float32")
     shape = (10, 16, 3)
     settings = {"lr": 0.001, "dropout": 0.2, "gru_encode": True, "entail_dir": "both"}
-    model = build_model(vectors, shape, settings)
+    model = build_model_word_based(vectors, shape, settings)
 
 
 def test_fit_model():
@@ -329,7 +248,7 @@ def test_fit_model():
     vectors = np.ndarray((100, 8), dtype="float32")
     shape = (10, 16, 3)
     settings = {"lr": 0.001, "dropout": 0.2, "gru_encode": True, "entail_dir": "both"}
-    model = build_model(vectors, shape, settings)
+    model = build_model_word_based(vectors, shape, settings)
 
     train_X = _generate_X(20, shape[0], vectors.shape[0])
     train_Y = _generate_Y(20, shape[2])
@@ -339,4 +258,4 @@ def test_fit_model():
     model.fit(train_X, train_Y, validation_data=(dev_X, dev_Y), epochs=5, batch_size=4)
 
 
-__all__ = [build_model]
+__all__ = [build_model_word_based]

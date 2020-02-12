@@ -12,7 +12,7 @@ from Transformers.spacy_glove_based import create_dataset
 #from Transformers.bert_word_based import word_transformer
 from Transformers.bert_sentence_based import sentence_transformer
 from keras.utils import to_categorical
-from keras_decomposable_attention import build_model, build_model_bert, build_model_bert_word
+from keras_decomposable_attention import build_model_word_based, build_model_sentence_based, build_model_bert_word
 from spacy_hook import get_embeddings, KerasSimilarityShim
 from keras import backend as k_backend
 
@@ -61,10 +61,10 @@ def train(train_loc, dev_loc, shape, settings, bert_path, transformer_type):
 
     if transformer_type == 'spacy':
         print(transformer_type)
-        model = build_model(get_embeddings(nlp.vocab), shape, settings)
+        model = build_model_word_based(get_embeddings(nlp.vocab), shape, settings)
     if transformer_type == 'bert_sentence':
         print(transformer_type)
-        model = build_model_bert(shape=shape, settings=settings)
+        model = build_model_sentence_based(shape=shape, settings=settings)
     else:
         print(transformer_type)
         model = build_model_bert_word(word_vecs=word_vecs, shape=shape, settings=settings)
