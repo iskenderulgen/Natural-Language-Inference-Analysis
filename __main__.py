@@ -1,24 +1,21 @@
-import numpy as np
-import json
-import plac
-import sys
-import os
 import importlib
-import spacy
-import en_core_web_lg
+import os
 import os.path
+import pickle
+import sys
 
-from Transformers.spacy_glove_based import create_dataset
-#from Transformers.bert_word_based import word_transformer
-from Transformers.bert_sentence_based import sentence_transformer
-from keras.utils import to_categorical
-from keras_decomposable_attention import build_model_word_based, build_model_sentence_based, build_model_bert_word
-from spacy_hook import get_embeddings, KerasSimilarityShim
+import numpy as np
+import plac
 from keras import backend as k_backend
 
-import pickle
+from Transformers.bert_sentence_based import bert_sentence_transformer
+from Transformers.bert_word_based import bert_word_based_transformer
+from Transformers.spacy_based import spacy_word_transformer
+from Transformers.utils import read_snli, load_spacy_nlp
+from keras_decomposable_attention import build_model_word_based, build_model_sentence_based
+from spacy_hook import get_embeddings, KerasSimilarityShim
 
-path = "/home/ulgen/Documents/Python_Projects/Contradiction/data/"
+path = "/media/ulgen/Samsung/contradiction_data/data/"
 
 
 # workaround for keras/tensorflow bug
@@ -39,35 +36,30 @@ def set_keras_backend(backend):
 
 
 set_keras_backend("tensorflow")
-LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
 
-def train(train_loc, dev_loc, shape, settings, bert_path, transformer_type):
-    print("Loading spaCy")
-    spacy.prefer_gpu()
-    gpu = spacy.require_gpu()
-    print("GPU:", gpu)
-    nlp = en_core_web_lg.load()
-
-    assert nlp.path is not None
-    print("Transformer type is = " + transformer_type)
-    train_x, train_labels, dev_x, dev_labels = pre_process(nlp=nlp, shape=shape, bert_dir=bert_path,
-                                                           train_loc=train_loc,
-                                                           dev_loc=dev_loc, transformer=transformer_type)
-
-    with open(path + 'Processed_SNLI/Bert_Processed_WordLevel/weights.pkl', 'rb') as f:
-        word_vecs_raw = pickle.load(f)
-        word_vecs = np.asarray(word_vecs_raw)
-
+def train(train_loc, dev_loc, shape, settings, transformer_type):
+    train_x, train_labels, dev_x, dev_labels, model = None, None, None, None, None
     if transformer_type == 'spacy':
-        print(transformer_type)
-        model = build_model_word_based(get_embeddings(nlp.vocab), shape, settings)
-    if transformer_type == 'bert_sentence':
-        print(transformer_type)
+        train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
+                                                                                   dev_loc=dev_loc, shape=shape,
+                                                                                   transformer_type=transformer_type)
+        model = build_model_word_based(vectors=vectors, shape=shape, settings=settings)
+
+    elif transformer_type == 'bert_word_based':
+        train_x, train_labels, dev_x, dev_labels, word_weights = bert_word_based_transformer(path=path,
+                                                                                             train_loc=train_loc,
+                                                                                             dev_loc=dev_loc,
+                                                                                             transformer_type=transformer_type)
+        model = build_model_word_based(vectors=word_weights, shape=shape, settings=settings)
+
+    elif transformer_type == 'bert_sentence':
+        train_x, train_labels, dev_x, dev_labels = bert_sentence_transformer(path=path, train_loc=train_loc,
+                                                                             dev_loc=dev_loc)
         model = build_model_sentence_based(shape=shape, settings=settings)
+
     else:
-        print(transformer_type)
-        model = build_model_bert_word(word_vecs=word_vecs, shape=shape, settings=settings)
+        print("Please define transformer method properly")
 
     model.fit(
         train_x,
@@ -78,51 +70,22 @@ def train(train_loc, dev_loc, shape, settings, bert_path, transformer_type):
         verbose=1
     )
 
-    if not (nlp.path / 'similarity').exists():
-        (nlp.path / 'similarity').mkdir()
-    print("Saving to", nlp.path / 'similarity')
+    if not os.path.isdir(path + 'similarity'):
+        os.mkdir(path+'similarity')
+    print("Saving to", path + 'similarity')
     weights = model.get_weights()
     # remove the embedding matrix.  We can reconstruct it.
     del weights[1]
-    with (nlp.path / 'similarity' / 'spacy_model').open('wb') as file_:
+    with (path + 'similarity/' + 'spacy_model', 'wb') as file_:
         pickle.dump(weights, file_)
-    with (nlp.path / 'similarity' / 'spacy_model_config.json').open('w') as file_:
+    with (path + 'similarity/' + 'spacy_model_config.json', 'w') as file_:
         file_.write(model.to_json())
-
-
-def pre_process(nlp, shape, transformer, bert_dir, train_loc, dev_loc):
-    train_texts1, train_texts2, train_labels = read_snli(train_loc)
-    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-
-    if transformer == 'spacy':
-        print("Processing texts using spacy")
-
-        if os.path.isfile(path=path + "Processed_SNLI/Spacy_Processed/train_x.pkl"):
-            print("Pre-Processed train file is found now loading")
-            with open(path + 'Processed_SNLI/Spacy_Processed/train_x.pkl', 'rb') as f:
-                train_x = pickle.load(f)
-        else:
-            print("There is no pre-processed file of train_X, Pre-Process will start now")
-            train_x = create_dataset(nlp=nlp, texts=train_texts1, hypotheses=train_texts2, num_unk=100,
-                                     max_length=shape[0])
-            with open(path + 'Processed_SNLI/Spacy_Processed/train_x.pkl', 'wb') as f:
-                pickle.dump(train_x, f)
-
-        if os.path.isfile(path=path + "Processed_SNLI/Spacy_Processed/dev_x.pkl"):
-            print("Pre-Processed dev file is found now loading")
-            with open(path + 'Processed_SNLI/Spacy_Processed/dev_x.pkl', 'rb') as f:
-                dev_x = pickle.load(f)
-        else:
-            print("There is no pre-processed file of dev_X, Pre-Process will start now")
-            dev_x = create_dataset(nlp=nlp, texts=dev_texts1, hypotheses=dev_texts2, num_unk=100, max_length=shape[0])
-            with open(path + 'Processed_SNLI/Spacy_Processed/dev_x.pkl', 'wb') as f:
-                pickle.dump(dev_x, f)
-        return train_x, train_labels, dev_x, dev_labels
 
 
 def evaluate(dev_loc, shape, bert_path):
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-    nlp = spacy.load("en_core_web_lg")
+
+    nlp = load_spacy_nlp()
     nlp.add_pipe(KerasSimilarityShim.load(nlp.path / "similarity", nlp, shape[0]))
     total = 0.0
     correct = 0.0
@@ -137,7 +100,7 @@ def evaluate(dev_loc, shape, bert_path):
 
 
 def demo(shape):
-    nlp = en_core_web_lg.load()
+    nlp = load_spacy_nlp()
     nlp.add_pipe(KerasSimilarityShim.load(nlp.path / "similarity", nlp, shape[0]))
 
     # doc1 = nlp("The king of France is bald.", disable=['parser', 'tagger', 'ner', 'textcat'])
@@ -153,22 +116,6 @@ def demo(shape):
 
     entailment_type, confidence = doc1.similarity(doc2)
     print("Entailment type:", entailment_type, "(Confidence:", confidence, ")")
-
-
-def read_snli(path):
-    texts1 = []
-    texts2 = []
-    labels = []
-    with open(path, "r") as file_:
-        for line in file_:
-            eg = json.loads(line)
-            label = eg["gold_label"]
-            if label == "-":  # per Parikh, ignore - SNLI entries
-                continue
-            texts1.append(eg["sentence1"])
-            texts2.append(eg["sentence2"])
-            labels.append(LABELS[label])
-    return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
 
 @plac.annotations(
@@ -191,12 +138,12 @@ def read_snli(path):
 )
 def main(
         mode="train",
-        transformer_type='bert_sentence',
+        transformer_type='bert_word_based',
         bert_location=path + "bert/",
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=768,  # 64 for spacy
+        max_length=64,  # 64 for word based
         nr_hidden=400,  # 200
         dropout=0.2,
         learn_rate=0.0001,  # 0.001
@@ -214,13 +161,13 @@ def main(
     }
 
     if mode == "train":
-        if train_loc == None or dev_loc == None:
+        if train_loc is None or dev_loc is None:
             print("Train mode requires paths to training and development data sets.")
             sys.exit(1)
-        train(train_loc=train_loc, dev_loc=dev_loc, shape=shape, settings=settings, bert_path=bert_location,
+        train(train_loc=train_loc, dev_loc=dev_loc, shape=shape, settings=settings,
               transformer_type=transformer_type)
     elif mode == "evaluate":
-        if dev_loc == None:
+        if dev_loc is None:
             print("Evaluate mode requires paths to test data set.")
             sys.exit(1)
         correct, total = evaluate(test_loc, shape, bert_location)

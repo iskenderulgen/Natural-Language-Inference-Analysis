@@ -18,44 +18,35 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import argparse
+import os
+import pickle
+
 import numpy as np
 import tensorflow as tf
 
+from Transformers.utils import read_snli
 from bert import modeling, tokenization
 
-flags = tf.flags
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_string("layers", "-1,-2,-3,-4", "")
-
-flags.DEFINE_integer(
-    "max_seq_length", 64,
-    "The maximum total input sequence length after WordPiece tokenization. "
-    "Sequences longer than this will be truncated, and sequences shorter "
-    "than this will be padded.")
-
-flags.DEFINE_bool(
-    "do_lower_case", True,
-    "Whether to lower case the input text. Should be True for uncased "
-    "models and False for cased models.")
-
-flags.DEFINE_integer("batch_size", 32, "Batch size for predictions.")
-
-flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
-
-flags.DEFINE_string("master", None,
-                    "If using a TPU, the address of the master.")
-
-flags.DEFINE_integer(
-    "num_tpu_cores", 8,
-    "Only used if `use_tpu` is True. Total number of TPU cores to use.")
-
-flags.DEFINE_bool(
-    "use_one_hot_embeddings", False,
-    "If True, tf.one_hot will be used for embedding lookups, otherwise "
-    "tf.nn.embedding_lookup will be used. On TPUs, this should be True "
-    "since it is much faster.")
+parser = argparse.ArgumentParser()
+parser.add_argument("--layers", type=str, default="-1,-2,-3,-4", help="Choose the layers that will be extracted")
+parser.add_argument("--max_seq_length", type=int, default=64,
+                    help="The maximum total input sequence length after WordPiece tokenization. "
+                         "Sequences longer than this will be truncated, and sequences shorter "
+                         "than this will be padded.")
+parser.add_argument("--do_lower_case", type=bool, default=True,
+                    help="Whether to lower case the input text. Should be True for uncased "
+                         "models and False for cased models.")
+parser.add_argument("--batch_size", type=int, default=32, help="Batch size for predictions.")
+parser.add_argument("--use_tpu", type=bool, default=False, help="Whether to use TPU or GPU/CPU.")
+parser.add_argument("--master", default=None, help="If using a TPU, the address of the master.")
+parser.add_argument("--num_tpu_cores", type=int, default=8,
+                    help="Only used if `use_tpu` is True. Total number of TPU cores to use.")
+parser.add_argument("--use_one_hot_embeddings", type=bool, default=False,
+                    help="If True, tf.one_hot will be used for embedding lookups, otherwise "
+                         "tf.nn.embedding_lookup will be used. On TPUs, this should be True "
+                         "since it is much faster.")
+args = parser.parse_args()
 
 
 class InputExample(object):
@@ -129,7 +120,7 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
                      use_one_hot_embeddings):
     """Returns `model_fn` closure for TPUEstimator."""
 
-    def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
+    def model_fn(features, mode):  # pylint: disable=unused-argument
         """The `model_fn` for TPUEstimator."""
 
         unique_ids = features["unique_ids"]
@@ -146,7 +137,7 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
             use_one_hot_embeddings=use_one_hot_embeddings)
 
         if mode != tf.estimator.ModeKeys.PREDICT:
-            raise ValueError("Only PREDICT modes are supported: %s" % (mode))
+            raise ValueError("Only PREDICT modes are supported: %s" % mode)
 
         tvars = tf.trainable_variables()
         scaffold_fn = None
@@ -263,7 +254,7 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
         # prints 5 example in to the console as an example
         if ex_index < 5:
             tf.logging.info("*** Example ***")
-            tf.logging.info("unique_id: %s" % (example.unique_id))
+            tf.logging.info("unique_id: %s" % example.unique_id)
             tf.logging.info("tokens: %s" % " ".join(
                 [tokenization.printable_text(x) for x in tokens]))
             tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
@@ -308,7 +299,7 @@ def read_examples(input_sentences):
     if type(input_sentences) is np.ndarray or list:
         print("input file is array or list")
         for sentence in input_sentences:
-            line = tokenization.convert_to_unicode(sentence)
+            line = tokenization.convert_to_unicode(sentence).strip()
             examples.append(InputExample(unique_id=unique_id, text_a=line, text_b=None))
             unique_id += 1
         return examples, total_sents
@@ -317,25 +308,25 @@ def read_examples(input_sentences):
 def sentence_transformer(bert_directory, input_file):
     tf.logging.set_verbosity(tf.logging.INFO)
 
-    layer_indexes = [int(x) for x in FLAGS.layers.split(",")]
+    layer_indexes = [int(x) for x in args.layers.split(",")]
 
     bert_config = modeling.BertConfig.from_json_file(bert_directory + "bert_config.json")
 
     tokenizer = tokenization.FullTokenizer(
-        vocab_file=bert_directory + "vocab.txt", do_lower_case=FLAGS.do_lower_case)
+        vocab_file=bert_directory + "vocab.txt", do_lower_case=args.do_lower_case)
 
     is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
     run_config = tf.contrib.tpu.RunConfig(
-        master=FLAGS.master,
+        master=args.master,
         tpu_config=tf.contrib.tpu.TPUConfig(
-            num_shards=FLAGS.num_tpu_cores,
+            num_shards=args.num_tpu_cores,
             per_host_input_for_training=is_per_host))
 
     examples, total_sent_count = read_examples(input_file)
 
     # This is the data which we'll need to export for word based level.
     features = convert_examples_to_features(
-        examples=examples, seq_length=FLAGS.max_seq_length, tokenizer=tokenizer)
+        examples=examples, seq_length=args.max_seq_length, tokenizer=tokenizer)
 
     unique_id_to_feature = {}
     for feature in features:
@@ -345,20 +336,20 @@ def sentence_transformer(bert_directory, input_file):
         bert_config=bert_config,
         init_checkpoint=bert_directory + "bert_model.ckpt",
         layer_indexes=layer_indexes,
-        use_tpu=FLAGS.use_tpu,
-        use_one_hot_embeddings=FLAGS.use_one_hot_embeddings)
+        use_tpu=args.use_tpu,
+        use_one_hot_embeddings=args.use_one_hot_embeddings)
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
     estimator = tf.contrib.tpu.TPUEstimator(
-        use_tpu=FLAGS.use_tpu,
+        use_tpu=args.use_tpu,
         model_fn=model_fn,
         config=run_config,
-        predict_batch_size=FLAGS.batch_size)
+        predict_batch_size=args.batch_size)
 
     # max seq length can be imported as parameter
     input_fn = input_fn_builder(
-        features=features, seq_length=FLAGS.max_seq_length)
+        features=features, seq_length=args.max_seq_length)
 
     sent_count = 0
     sentence_vectors = []
@@ -373,6 +364,7 @@ def sentence_transformer(bert_directory, input_file):
                 layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
                 layers.append(layers_output_flat)
             sentence_vectors.append(sum(layers)[:768])
+            print("Token budur = kontrolden sonra sil bu satırı = ", token)
             break
 
         sent_count = sent_count + 1
@@ -383,8 +375,12 @@ def sentence_transformer(bert_directory, input_file):
     print("its finished")
     return sentence_vectors
 
-def bert_sententence_transformer():
-    print("Processing texts using bert")
+
+def bert_sentence_transformer(path, train_loc, dev_loc):
+    train_texts1, train_texts2, train_labels = read_snli(train_loc)
+    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+
+    print("Processing using bert sentence approach")
     if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed_Sentence/train_x.pkl"):
         print("Pre-Processed train file is found now loading")
         with open(path + 'Processed_SNLI/Bert_Processed_Sentence/train_x.pkl', 'rb') as f:
@@ -392,7 +388,7 @@ def bert_sententence_transformer():
     else:
         print("There is no pre-processed file of train_X, Pre-Process will start now")
         train_sentences = train_texts1 + train_texts2
-        vectors_train = sentence_transformer(bert_directory=bert_dir, input_file=train_sentences)
+        vectors_train = sentence_transformer(bert_directory=path + "/bert", input_file=train_sentences)
         train_x = [np.array(vectors_train[: len(train_texts1)]), np.array(vectors_train[len(train_texts2):])]
         with open(path + 'Processed_SNLI/Bert_Processed_Sentence/train_x.pkl', 'wb') as f:
             pickle.dump(train_x, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -404,7 +400,7 @@ def bert_sententence_transformer():
     else:
         print("There is no pre-processed file of dev_X, Pre-Process will start now")
         dev_sentences = dev_texts1 + dev_texts2
-        vectors_dev = sentence_transformer(bert_directory=bert_dir, input_file=dev_sentences)
+        vectors_dev = sentence_transformer(bert_directory=path + "/bert", input_file=dev_sentences)
         dev_x = [np.array(vectors_dev[: len(dev_texts1)]), np.array(vectors_dev[len(dev_texts2):])]
         with open(path + 'Processed_SNLI/Bert_Processed_Sentence/dev_x.pkl', 'wb') as f:
             pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)

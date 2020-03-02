@@ -18,8 +18,7 @@ def build_model_word_based(vectors, shape, settings):
     # embeddings (projected)
     # vector shape is [684,825 , 300] -> for spacy
     # vector shape is [35,622 , 768] -> for bert
-    embed = create_embedding(vectors, max_length, nr_hidden)
-    print("embed is :", embed)
+    embed = word_embedding_layer(vectors, max_length, nr_hidden)
 
     a = embed(input1)
     print("a is :", K.shape(a))
@@ -76,33 +75,26 @@ def build_model_word_based(vectors, shape, settings):
         loss="categorical_crossentropy",
         metrics=["accuracy"],
     )
-    print("whole model is fine")
-    # buraya kadar hersey normal gidiyor modelide cıkartıyor
+
     return model
 
+
 def build_model_sentence_based(shape, settings):
-    # shape = 768 , 200 , 3
+    # shape = 1 , 200 , 3
     max_length, nr_hidden, nr_class = shape
-    # max_length = 768
-    # nr_hidden = 200
-    # nr_class = 3
 
     input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
-    print("input 1 is : ", input1)
     print("input 1 shape is :", K.shape(input1))
 
     input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
-    print("input 2 is : ", input2)
     print("input 2 shape is :", K.shape(input2))
 
-    bert = bert_seq(projected_dim=nr_hidden)
+    bert = sentence_embedding_layer(projected_dim=nr_hidden)
 
     a = bert(input1)
-    print("a is : ", a)
     print("a shape is :", K.shape(a))
 
     b = bert(input2)
-    print("b is : ", b)
     print("b shape is :", K.shape(b))
 
     # step 1: attend
@@ -155,12 +147,11 @@ def build_model_sentence_based(shape, settings):
         loss="categorical_crossentropy",
         metrics=["accuracy"],
     )
-    print("whole model is fine")
-    # buraya kadar hersey normal gidiyor modelide cıkartıyor
+
     return model
 
 
-def bert_seq(projected_dim):
+def sentence_embedding_layer(projected_dim):
     return models.Sequential(
         [
             layers.Reshape(
@@ -174,7 +165,7 @@ def bert_seq(projected_dim):
     )
 
 
-def create_embedding(vectors, max_length, projected_dim):
+def word_embedding_layer(vectors, max_length, projected_dim):
     return models.Sequential(
         [
             layers.Embedding(

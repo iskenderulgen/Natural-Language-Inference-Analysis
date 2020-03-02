@@ -1,6 +1,8 @@
-import cupy as cp
+
 import numpy as np
 from keras.models import model_from_json
+
+from Transformers.spacy_based import get_embeddings
 
 try:
     import cPickle as pickle
@@ -44,36 +46,6 @@ class KerasSimilarityShim(object):
         scores = self.model.predict([x1, x2])
 
         return self.entailment_types[scores.argmax()], scores.max()
-
-
-def get_embeddings(vocab, nr_unk=100):
-    """
-    NOT: Once 100 satırlık bir yani 100 kelimelik bir OOV matrisi yapıyor random ile
-    daha sonra bunların norm unu alıyor ardından OOV + NumVectors (yani kelime sayısı)
-    kadar zero dizisi yapıyor. Devamında ise bu sıfırlardan olusan vectors dizisinin
-    ilk 100 luk kısmına OOV randomlarını atıyor. Devamında ise dizin kalanına rank ları üzerinden
-    kelimelerin cevtorlerini atıyor. ve vectors dizisini olustuyor. Burdaki vocab direk spacy üzerinden mi
-    yoksa verilen veri setinden cıkan vocab mı anlamadım ama vocab sayısı ile web_core_en_lg sayısı uyusuyor.
-    :param vocab:
-    :param nr_unk:
-    :return:
-    """
-    # the extra +1 is for a zero vector representing sentence-final padding
-    num_vectors = max(lex.rank for lex in vocab) + 2
-
-    # create random vectors for OOV tokens
-    oov = np.random.normal(size=(nr_unk, vocab.vectors_length))
-    oov = oov / oov.sum(axis=1, keepdims=True)
-
-    vectors = np.zeros((num_vectors + nr_unk, vocab.vectors_length), dtype="float32")
-    vectors[1: (nr_unk + 1), ] = oov
-    for lex in vocab:
-        if lex.has_vector and lex.vector_norm > 0:
-            # burada vector olan yerler Cupy dizisi bunu numpy a cevirmek gerekiyormus
-            vectors[nr_unk + 1 + lex.rank] = cp.asnumpy(lex.vector / lex.vector_norm)
-    # vector shape is [684,925 , 300]
-    print("getting embeddings from vocabulary is finished")
-    return vectors
 
 
 def get_word_ids(docs, max_length=100, nr_unk=100):
