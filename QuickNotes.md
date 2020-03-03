@@ -38,10 +38,23 @@ vectorizer could be more useful.
 | 0.00001       | 200           | 64    | 72   |
 | 0.00001       | 400           | 128   | 74   |
 
-# Experimental Results using BERT word based approach
+# Experimental Results using BERT word based approach with bert base
 
 ## Train Results
 
 * 549367/549367 [==============================] 
 * 107s 195us/step - loss: 0.4935 - acc: 0.8064 - val_loss: 0.4377 - val_acc: 0.8316
 * Saving to /home/ulgen/anaconda3/envs/python36/lib/python3.6/site-packages/en_core_web_lg/en_core_web_lg-2.2.5/similarity
+
+
+# Experimental Results using BERT word based approach with bert Large
+
+## Train Results
+
+* 549367/549367 [==============================] 
+* 130s 236us/step - loss: 0.3795 - acc: 0.8564 - val_loss: 0.3802 - val_acc: 0.8596
+
+| lr            | hidden        | batch | Acc  |
+| ------------- |:-------------:| -----:| ----:|
+| 0.00001       | 200           | 128   | 85   |
+| 0.00001       | 512           | 128   | 86   |

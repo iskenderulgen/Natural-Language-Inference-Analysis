@@ -295,7 +295,7 @@ def get_word_embedding_matrix(file_name, tensor_name, all_tensors,
     embeds = []
     nr_unk = 100
 
-    oov = np.random.normal(size=(100, 768))
+    oov = np.random.normal(size=(100, 1024))
     oov = oov / oov.sum(axis=1, keepdims=True)
 
     reader = tf.pywrap_tensorflow.NewCheckpointReader(file_name)
@@ -312,7 +312,7 @@ def get_word_embedding_matrix(file_name, tensor_name, all_tensors,
         # print(reader.get_tensor(tensor_name))
         embeds.append(reader.get_tensor(tensor_name))
 
-    embed_matrix = np.zeros((30522 + nr_unk, 768), dtype="float32")
+    embed_matrix = np.zeros((30522 + nr_unk, 1024), dtype="float32")
     embed_matrix[0: nr_unk, ] = oov
     embed_matrix[nr_unk:30522 + nr_unk, ] = np.asarray(embeds)
 

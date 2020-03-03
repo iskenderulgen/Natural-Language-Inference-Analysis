@@ -71,14 +71,14 @@ def train(train_loc, dev_loc, shape, settings, transformer_type):
     )
 
     if not os.path.isdir(path + 'similarity'):
-        os.mkdir(path+'similarity')
+        os.mkdir(path + 'similarity')
     print("Saving to", path + 'similarity')
     weights = model.get_weights()
     # remove the embedding matrix.  We can reconstruct it.
     del weights[1]
-    with (path + 'similarity/' + 'spacy_model', 'wb') as file_:
+    with open(path + 'similarity/' + 'spacy_model', 'wb') as file_:
         pickle.dump(weights, file_)
-    with (path + 'similarity/' + 'spacy_model_config.json', 'w') as file_:
+    with open(path + 'similarity/' + 'spacy_model_config.json', 'w') as file_:
         file_.write(model.to_json())
 
 
@@ -143,12 +143,12 @@ def main(
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=64,  # 64 for word based
-        nr_hidden=400,  # 200
+        max_length=64,  # 64 for word based #1024 for bert
+        nr_hidden=200,  # 200
         dropout=0.2,
         learn_rate=0.0001,  # 0.001
         batch_size=128,
-        nr_epoch=10,
+        nr_epoch=1,
         entail_dir="both",
 ):
     shape = (max_length, nr_hidden, 3)

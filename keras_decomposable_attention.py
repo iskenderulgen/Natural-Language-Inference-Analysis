@@ -189,7 +189,7 @@ def word_embedding_layer(vectors, max_length, projected_dim):
     )
 
 
-def create_feedforward(num_units=200, activation="relu", dropout_rate=0.2):
+def create_feedforward(num_units, activation="relu", dropout_rate=0.2):
     return models.Sequential(
         [
             layers.Dense(num_units, activation=activation),
