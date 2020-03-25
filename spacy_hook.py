@@ -1,9 +1,11 @@
+"""
+TO-DO
+This section is to be re-designed to cover any model that can be imported.
+Currently its out of order.
 
+"""
 import numpy as np
-from keras.models import model_from_json
-
-from Transformers.spacy_based import get_embeddings
-
+from keras.models import load_model
 try:
     import cPickle as pickle
 except ImportError:
@@ -14,20 +16,21 @@ class KerasSimilarityShim(object):
     entailment_types = ["entailment", "contradiction", "neutral"]
 
     @classmethod
-    def load(cls, path, nlp, max_length=100, get_features=None):
+    def load(cls, path, max_length=100, get_features=None):
         if get_features is None:
             get_features = get_word_ids
 
-        with (path / 'config.json').open() as file_:
-            model = model_from_json(file_.read())
-        with (path / 'model').open('rb') as file_:
-            weights = pickle.load(file_)
+        # with open(path+'/spacy_model_config.json', "r") as file_:
+        #     loaded_model = model_from_json(file_.read())
+        # with (path+'/model').open('rb') as file_:
+        #     weights = pickle.load(file_)
+        # loaded_model.load_weights(weights)
+        # print("Loaded model from disk")
 
-        embeddings = get_embeddings(nlp.vocab)
-        weights.insert(1, embeddings)
-        model.set_weights(weights)
+        loaded_model = load_model(path+'model.h5')
+        print("Loaded model from disk")
 
-        return cls(model, get_features=get_features, max_length=max_length)
+        return cls(loaded_model, get_features=get_features, max_length=max_length)
 
     def __init__(self, model, get_features=None, max_length=100):
         self.model = model

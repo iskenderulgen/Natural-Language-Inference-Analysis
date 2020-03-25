@@ -10,10 +10,11 @@ from keras import backend as k_backend
 
 from Transformers.bert_sentence_based import bert_sentence_transformer
 from Transformers.bert_word_based import bert_word_based_transformer
+from Transformers.glove_word_based import glove_word_transformer
 from Transformers.spacy_based import spacy_word_transformer
 from Transformers.utils import read_snli, load_spacy_nlp
-from keras_decomposable_attention import build_model_word_based, build_model_sentence_based
-from spacy_hook import get_embeddings, KerasSimilarityShim
+from keras_decomposable_attention import decomp_model_word_based, decomp_model_sentence_based, esim_word_model
+from spacy_hook import KerasSimilarityShim
 
 path = "/media/ulgen/Samsung/contradiction_data/data/"
 
@@ -44,22 +45,30 @@ def train(train_loc, dev_loc, shape, settings, transformer_type):
         train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
                                                                                    dev_loc=dev_loc, shape=shape,
                                                                                    transformer_type=transformer_type)
-        model = build_model_word_based(vectors=vectors, shape=shape, settings=settings)
+        model = decomp_model_word_based(vectors=vectors, shape=shape, settings=settings)
 
     elif transformer_type == 'bert_word_based':
         train_x, train_labels, dev_x, dev_labels, word_weights = bert_word_based_transformer(path=path,
                                                                                              train_loc=train_loc,
                                                                                              dev_loc=dev_loc,
                                                                                              transformer_type=transformer_type)
-        model = build_model_word_based(vectors=word_weights, shape=shape, settings=settings)
+        model = esim_word_model(vectors=word_weights, shape=shape, settings=settings)
 
     elif transformer_type == 'bert_sentence':
         train_x, train_labels, dev_x, dev_labels = bert_sentence_transformer(path=path, train_loc=train_loc,
                                                                              dev_loc=dev_loc)
-        model = build_model_sentence_based(shape=shape, settings=settings)
+        model = decomp_model_sentence_based(shape=shape, settings=settings)
+
+    elif transformer_type == 'glove':
+        train_x, train_labels, dev_x, dev_labels, vectors = glove_word_transformer(path=path, train_loc=train_loc,
+                                                                                   dev_loc=dev_loc, shape=shape,
+                                                                                   transformer_type=transformer_type)
+        model = decomp_model_word_based(vectors=vectors, shape=shape, settings=settings)
 
     else:
         print("Please define transformer method properly")
+
+    model.summary()
 
     model.fit(
         train_x,
@@ -73,20 +82,15 @@ def train(train_loc, dev_loc, shape, settings, transformer_type):
     if not os.path.isdir(path + 'similarity'):
         os.mkdir(path + 'similarity')
     print("Saving to", path + 'similarity')
-    weights = model.get_weights()
-    # remove the embedding matrix.  We can reconstruct it.
-    del weights[1]
-    with open(path + 'similarity/' + 'spacy_model', 'wb') as file_:
-        pickle.dump(weights, file_)
-    with open(path + 'similarity/' + 'spacy_model_config.json', 'w') as file_:
-        file_.write(model.to_json())
+
+    model.save(path + 'similarity/' + "model.h5")
 
 
-def evaluate(dev_loc, shape, bert_path):
+def evaluate(dev_loc, shape):
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-
+    print("evaluation dataset loaded")
     nlp = load_spacy_nlp()
-    nlp.add_pipe(KerasSimilarityShim.load(nlp.path / "similarity", nlp, shape[0]))
+    nlp.add_pipe(KerasSimilarityShim.load(path=path + "similarity/", max_length=shape[0]))
     total = 0.0
     correct = 0.0
     for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
@@ -101,7 +105,7 @@ def evaluate(dev_loc, shape, bert_path):
 
 def demo(shape):
     nlp = load_spacy_nlp()
-    nlp.add_pipe(KerasSimilarityShim.load(nlp.path / "similarity", nlp, shape[0]))
+    nlp.add_pipe(KerasSimilarityShim.load(nlp.path / "similarity", shape[0]))
 
     # doc1 = nlp("The king of France is bald.", disable=['parser', 'tagger', 'ner', 'textcat'])
     # doc2 = nlp("France has no king.", disable=['parser', 'tagger', 'ner', 'textcat'])
@@ -128,13 +132,6 @@ def demo(shape):
     learn_rate=("Learning rate", "option", "r", float),
     batch_size=("Batch size for neural network training", "option", "b", int),
     nr_epoch=("Number of training epochs", "option", "e", int),
-    entail_dir=(
-            "Direction of entailment",
-            "option",
-            "D",
-            str,
-            ["both", "left", "right"],
-    ),
 )
 def main(
         mode="train",
@@ -143,13 +140,12 @@ def main(
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=64,  # 64 for word based #1024 for bert
+        max_length=64,  # 64 for word based #1024 for bert sentence
         nr_hidden=200,  # 200
         dropout=0.2,
-        learn_rate=0.0001,  # 0.001
-        batch_size=128,
-        nr_epoch=1,
-        entail_dir="both",
+        learn_rate=0.001,  # 0.001
+        batch_size=100,
+        nr_epoch=7,
 ):
     shape = (max_length, nr_hidden, 3)
     settings = {
@@ -157,7 +153,6 @@ def main(
         "dropout": dropout,
         "batch_size": batch_size,
         "nr_epoch": nr_epoch,
-        "entail_dir": entail_dir,
     }
 
     if mode == "train":
@@ -170,7 +165,7 @@ def main(
         if dev_loc is None:
             print("Evaluate mode requires paths to test data set.")
             sys.exit(1)
-        correct, total = evaluate(test_loc, shape, bert_location)
+        correct, total = evaluate(test_loc, shape)
         print(correct, "/", total, correct / total)
     else:
         demo(shape)

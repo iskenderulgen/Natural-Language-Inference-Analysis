@@ -4,9 +4,76 @@
 import numpy as np
 from keras import layers, Model, models, optimizers
 from keras import backend as K
+from keras.layers import CuDNNLSTM
+from keras.layers.wrappers import Bidirectional
+import tensorflow as tf
 
 
-def build_model_word_based(vectors, shape, settings):
+def esim_word_model(vectors, shape, settings):
+    max_length, nr_hidden, nr_class = shape
+
+    bilstm1 = Bidirectional(CuDNNLSTM(nr_hidden, return_sequences=True))
+    bilstm2 = Bidirectional(CuDNNLSTM(nr_hidden, return_sequences=True))
+
+    i1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
+    print("input 1 is :", K.shape(i1))
+    i2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
+    print("input 2 is :", K.shape(i2))
+
+    embed = word_embedding_layer(vectors, max_length, nr_hidden)
+
+    x1 = embed(i1)
+    x2 = embed(i2)
+
+    x1 = bilstm1(x1)
+    x2 = bilstm1(x2)
+
+    # e = tf.keras.layers.Attention()([x1, x2])
+
+    e = layers.Dot(axes=2)([x1, x2])
+    e1 = layers.Softmax(axis=2)(e)
+    e2 = layers.Softmax(axis=1)(e)
+    e1 = layers.Lambda(K.expand_dims, arguments={'axis': 3})(e1)
+    e2 = layers.Lambda(K.expand_dims, arguments={'axis': 3})(e2)
+
+    _x1 = layers.Lambda(K.expand_dims, arguments={'axis': 1})(x2)
+    _x1 = layers.Multiply()([e1, _x1])
+    _x1 = layers.Lambda(K.sum, arguments={'axis': 2})(_x1)
+    _x2 = layers.Lambda(K.expand_dims, arguments={'axis': 2})(x1)
+    _x2 = layers.Multiply()([e2, _x2])
+    _x2 = layers.Lambda(K.sum, arguments={'axis': 1})(_x2)
+
+    m1 = layers.Concatenate()([x1, _x1, layers.Subtract()([x1, _x1]), layers.Multiply()([x1, _x1])])
+    m2 = layers.Concatenate()([x2, _x2, layers.Subtract()([x2, _x2]), layers.Multiply()([x2, _x2])])
+
+    y1 = bilstm2(m1)
+    y2 = bilstm2(m2)
+
+    mx1 = layers.Lambda(K.max, arguments={'axis': 1})(y1)
+    av1 = layers.Lambda(K.mean, arguments={'axis': 1})(y1)
+    mx2 = layers.Lambda(K.max, arguments={'axis': 1})(y2)
+    av2 = layers.Lambda(K.mean, arguments={'axis': 1})(y2)
+
+    y = layers.Concatenate()([av1, mx1, av2, mx2])
+    y = layers.Dense(1024, activation='relu')(y)
+    y = layers.Dropout(0.2)(y)
+    y = layers.Dense(1024, activation='relu')(y)
+    y = layers.Dropout(0.2)(y)
+    y = layers.Dense(3, activation='softmax')(y)
+
+    model = Model(inputs=[i1, i2], outputs=y)
+    model.summary()
+
+    model.compile(
+        optimizer=optimizers.Adam(lr=settings["lr"]),
+        loss="categorical_crossentropy",
+        metrics=["accuracy"],
+    )
+
+    return model
+
+
+def decomp_model_word_based(vectors, shape, settings):
     # shape = 64 , 200 , 3
     max_length, nr_hidden, nr_class = shape
 
@@ -26,45 +93,28 @@ def build_model_word_based(vectors, shape, settings):
     print("b is :", K.shape(b))
 
     # step 1: attend
-    F = create_feedforward(nr_hidden)
+    F = create_feedforward(num_units=nr_hidden)
     att_weights = layers.dot([F(a), F(b)], axes=-1)
 
-    G = create_feedforward(nr_hidden)
+    G = create_feedforward(num_units=nr_hidden)
 
-    if settings["entail_dir"] == "both":
-        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
-        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
-        alpha = layers.dot([norm_weights_a, a], axes=1)
-        beta = layers.dot([norm_weights_b, b], axes=1)
+    norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
+    norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
+    alpha = layers.dot([norm_weights_a, a], axes=1)
+    beta = layers.dot([norm_weights_b, b], axes=1)
 
-        # step 2: compare
-        comp1 = layers.concatenate([a, beta])
-        comp2 = layers.concatenate([b, alpha])
-        v1 = layers.TimeDistributed(G)(comp1)
-        v2 = layers.TimeDistributed(G)(comp2)
+    # step 2: compare
+    comp1 = layers.concatenate([a, beta])
+    comp2 = layers.concatenate([b, alpha])
+    v1 = layers.TimeDistributed(G)(comp1)
+    v2 = layers.TimeDistributed(G)(comp2)
 
-        # step 3: aggregate
-        v1_sum = layers.Lambda(sum_word)(v1)
-        v2_sum = layers.Lambda(sum_word)(v2)
-        concat = layers.concatenate([v1_sum, v2_sum])
+    # step 3: aggregate
+    v1_sum = layers.Lambda(sum_word)(v1)
+    v2_sum = layers.Lambda(sum_word)(v2)
+    concat = layers.concatenate([v1_sum, v2_sum])
 
-    elif settings["entail_dir"] == "left":
-        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
-        alpha = layers.dot([norm_weights_a, a], axes=1)
-        comp2 = layers.concatenate([b, alpha])
-        v2 = layers.TimeDistributed(G)(comp2)
-        v2_sum = layers.Lambda(sum_word)(v2)
-        concat = v2_sum
-
-    else:
-        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
-        beta = layers.dot([norm_weights_b, b], axes=1)
-        comp1 = layers.concatenate([a, beta])
-        v1 = layers.TimeDistributed(G)(comp1)
-        v1_sum = layers.Lambda(sum_word)(v1)
-        concat = v1_sum
-
-    H = create_feedforward(nr_hidden)
+    H = create_feedforward(num_units=nr_hidden)
     out = H(concat)
     out = layers.Dense(nr_class, activation="softmax")(out)
 
@@ -79,7 +129,7 @@ def build_model_word_based(vectors, shape, settings):
     return model
 
 
-def build_model_sentence_based(shape, settings):
+def decomp_model_sentence_based(shape, settings):
     # shape = 1 , 200 , 3
     max_length, nr_hidden, nr_class = shape
 
@@ -103,38 +153,21 @@ def build_model_sentence_based(shape, settings):
 
     G = create_feedforward(nr_hidden)
 
-    if settings["entail_dir"] == "both":
-        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
-        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
-        alpha = layers.dot([norm_weights_a, a], axes=1)
-        beta = layers.dot([norm_weights_b, b], axes=1)
+    norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
+    norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
+    alpha = layers.dot([norm_weights_a, a], axes=1)
+    beta = layers.dot([norm_weights_b, b], axes=1)
 
-        # step 2: compare
-        comp1 = layers.concatenate([a, beta])
-        comp2 = layers.concatenate([b, alpha])
-        v1 = layers.TimeDistributed(G)(comp1)
-        v2 = layers.TimeDistributed(G)(comp2)
+    # step 2: compare
+    comp1 = layers.concatenate([a, beta])
+    comp2 = layers.concatenate([b, alpha])
+    v1 = layers.TimeDistributed(G)(comp1)
+    v2 = layers.TimeDistributed(G)(comp2)
 
-        # step 3: aggregate
-        v1_sum = layers.Lambda(sum_word)(v1)
-        v2_sum = layers.Lambda(sum_word)(v2)
-        concat = layers.concatenate([v1_sum, v2_sum])
-
-    elif settings["entail_dir"] == "left":
-        norm_weights_a = layers.Lambda(normalizer(1))(att_weights)
-        alpha = layers.dot([norm_weights_a, a], axes=1)
-        comp2 = layers.concatenate([b, alpha])
-        v2 = layers.TimeDistributed(G)(comp2)
-        v2_sum = layers.Lambda(sum_word)(v2)
-        concat = v2_sum
-
-    else:
-        norm_weights_b = layers.Lambda(normalizer(2))(att_weights)
-        beta = layers.dot([norm_weights_b, b], axes=1)
-        comp1 = layers.concatenate([a, beta])
-        v1 = layers.TimeDistributed(G)(comp1)
-        v1_sum = layers.Lambda(sum_word)(v1)
-        concat = v1_sum
+    # step 3: aggregate
+    v1_sum = layers.Lambda(sum_word)(v1)
+    v2_sum = layers.Lambda(sum_word)(v2)
+    concat = layers.concatenate([v1_sum, v2_sum])
 
     H = create_feedforward(nr_hidden)
     out = H(concat)
@@ -169,11 +202,9 @@ def word_embedding_layer(vectors, max_length, projected_dim):
     return models.Sequential(
         [
             layers.Embedding(
-                # input_dimm (size of vocab)
-                # 684925 dim for [0]
+                # vocab / vector size - total word vector size
                 vectors.shape[0],
-                # output dim (300 dim vector)
-                # 300 dim for [1] (dim per word)
+                # dimension of word vectors (300 or 1024)
                 vectors.shape[1],
                 # max sequence length (64 words max)
                 input_length=max_length,
@@ -217,7 +248,7 @@ def test_build_model():
     vectors = np.ndarray((100, 8), dtype="float32")
     shape = (10, 16, 3)
     settings = {"lr": 0.001, "dropout": 0.2, "gru_encode": True, "entail_dir": "both"}
-    model = build_model_word_based(vectors, shape, settings)
+    model = decomp_model_word_based(vectors, shape, settings)
 
 
 def test_fit_model():
@@ -239,7 +270,7 @@ def test_fit_model():
     vectors = np.ndarray((100, 8), dtype="float32")
     shape = (10, 16, 3)
     settings = {"lr": 0.001, "dropout": 0.2, "gru_encode": True, "entail_dir": "both"}
-    model = build_model_word_based(vectors, shape, settings)
+    model = decomp_model_word_based(vectors, shape, settings)
 
     train_X = _generate_X(20, shape[0], vectors.shape[0])
     train_Y = _generate_Y(20, shape[2])
@@ -249,4 +280,4 @@ def test_fit_model():
     model.fit(train_X, train_Y, validation_data=(dev_X, dev_Y), epochs=5, batch_size=4)
 
 
-__all__ = [build_model_word_based]
+__all__ = [decomp_model_word_based]
