@@ -77,3 +77,12 @@ Context:  ESIM is based on two layers of BiLSTM network which uses attention.
 * Train Time for 200 hidden = 70 mins
 
 * TO - DO , make batch size 50 make adam reg param = 0.0005 (Estimated train time 10 hrs)
+
+To pick ideal hidden size =  NS / (a * (Ni + No))
+
+ - Ns = size of the train input
+ - Ni = size of the input neuron size
+ - No = size of the output neuron size
+ - a = scaling factor
+
+a works best with 2
