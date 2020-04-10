@@ -11,7 +11,7 @@ from bert.tokenization import convert_to_unicode
 
 
 def glove_embedding_vocab_extractor(path):
-    "Nr_unk for the oov vectors. 100 rows of random vectors"
+    """Nr_unk for the oov vectors. 100 rows of random vectors"""
     nr_unk = 100
 
     f = open(os.path.join(path, "Glove/glove.840B.300d.txt"))

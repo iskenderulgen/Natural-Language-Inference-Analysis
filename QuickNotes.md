@@ -70,8 +70,8 @@ Context:  ESIM is based on two layers of BiLSTM network which uses attention.
 
 | learning_rate| hidden_size   | batch | Train_Acc  | Val_Acc|
 | -------------|:-------------:| -----:| ----------:| ------:|
-| 0.0001       | 200           | 100   | 88.81      | 86.30  |
-| 0.0001       | 400           | 100   | 90.17      | 86.55  |
+| 0.0001       | 400           | 100   | 88.81      | 86.30  |
+| 0.0001       | 200           | 100   | 90.17      | 86.55  |
 
 * Train time for 400 hidden = 4.5 hrs
 * Train Time for 200 hidden = 70 mins

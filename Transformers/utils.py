@@ -1,14 +1,12 @@
 import collections
 import json
-import os
-import pickle
-import pprint
-import random
 
-import tensorflow as tf
 import en_core_web_lg
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import spacy
+import tensorflow as tf
 from keras.utils import to_categorical
 
 from bert.tokenization import convert_to_unicode
@@ -57,3 +55,25 @@ def load_vocab():
             index += 1
     return vocab
 
+
+def attention_visualization(tokens1, tokens2, attention1, attention2):
+    length_sent1 = len(tokens1)
+    length_sent2 = len(tokens2)
+
+    attentions_scores = []
+
+    for i in attention1[0][:length_sent1]:
+        for j in attention2[0][:length_sent2]:
+            attentions_scores.append(np.dot(i, j))
+    attentions_scores = np.asarray(attentions_scores)
+    attentions_scores = attentions_scores / np.sum(attentions_scores)
+
+    plt.subplots(figsize=(10, 10))
+
+    ax = sns.heatmap(attentions_scores.reshape((length_sent1, length_sent2)), linewidths=0.5, annot=True,
+                     cbar=True, cmap="Blues")
+
+    ax.set_yticklabels([i for i in tokens1])
+    plt.yticks(rotation=0)
+    ax.set_xticklabels([j for j in tokens2])
+    plt.show()
