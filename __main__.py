@@ -23,7 +23,7 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
         train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
                                                                                    dev_loc=dev_loc, shape=shape,
                                                                                    transformer_type=transformer_type)
-        model = decomp_attention_model(vectors=vectors, shape=shape, settings=settings, train_type=train_type)
+        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
 
     elif transformer_type == 'glove':
         train_x, train_labels, dev_x, dev_labels, vectors = glove_word_transformer(path=path, train_loc=train_loc,
@@ -36,7 +36,7 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
                                                                                              train_loc=train_loc,
                                                                                              dev_loc=dev_loc,
                                                                                              transformer_type=transformer_type)
-        model = decomp_attention_model(vectors=word_weights, shape=shape, settings=settings,train_type=train_type)
+        model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings)
 
     elif transformer_type == 'bert_sentence':
         train_x, train_labels, dev_x, dev_labels = bert_sentence_transformer(path=path, train_loc=train_loc,
@@ -82,8 +82,8 @@ def evaluate(dev_loc, shape):
 
 
 def demo(shape, type, visualization):
-    hypothesis = "A man inspects the uniform of a figure in some East Asian country."
-    premise = "The man is sleeping."
+    hypothesis = "in the park alice plays a flute solo"
+    premise = "Someone playing music outside"
 
     if type == 'spacy':
         nlp = load_spacy_nlp()
@@ -133,9 +133,9 @@ def demo(shape, type, visualization):
     nr_epoch=("Number of training epochs", "option", "e", int),
 )
 def main(
-        mode="train",
+        mode="demo",
         train_type="word",
-        transformer_type='bert_word_based',
+        transformer_type='spacy',
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
@@ -143,8 +143,8 @@ def main(
         nr_hidden=200,  # 200
         dropout=0.2,
         learn_rate=0.001,  # 0.001
-        batch_size=1024,  # 100 for ESIM
-        nr_epoch=7,
+        batch_size=100,  # 100 for ESIM
+        nr_epoch=2,
         attention_visualization=True):
     shape = (max_length, nr_hidden, 3)
     settings = {

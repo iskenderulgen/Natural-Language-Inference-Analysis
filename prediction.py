@@ -42,7 +42,7 @@ class SpacyPrediction(object):
         if get_features is None:
             get_features = get_word_ids
 
-        model = load_model(path + 'model(spacy_esim).h5', custom_objects={"tf": tf})
+        model = load_model(path + 'model(esim_spacy).h5', custom_objects={"tf": tf})
         print("loading model")
         #############
         model = Model(inputs=model.input,
@@ -111,17 +111,12 @@ class BertWordPredict(object):
             # This is the part that tokens converted to ids.
             input_ids_raw = tokenizer.convert_tokens_to_ids(tokens)
 
-            # (+100) is reserved for OOV tokens
-            input_ids = []
-            for i in range(len(input_ids_raw)):
-                input_ids.append(100 + input_ids_raw[i])
-
             # Zero-pad up to the sequence length.
-            while len(input_ids) < seq_length:
-                input_ids.append(0)
-            assert len(input_ids) == seq_length
+            while len(input_ids_raw) < seq_length:
+                input_ids_raw.append(0)
+            assert len(input_ids_raw) == seq_length
 
-            features.append(input_ids)
+            features.append(input_ids_raw)
             sentence_tokens.append(tokens)
 
         return features, sentence_tokens
@@ -130,11 +125,13 @@ class BertWordPredict(object):
     def predict(hypothesis, premise, path):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
-        model = load_model(path + 'similarity/model(hidden200).h5', custom_objects={"tf": tf})
+        model = load_model(path + 'similarity/model(esim_spacy).h5', custom_objects={"tf": tf})
         print("loading model")
         model.summary()
         model = Model(inputs=model.input,
-                      outputs=[model.output])
+                      outputs=[model.output,
+                               model.get_layer('sum_x1').output,
+                               model.get_layer('sum_x2').output])
 
         print("Loaded model from disk")
         tokenizer = tokenization.FullTokenizer(
@@ -143,14 +140,14 @@ class BertWordPredict(object):
         sentences = [hypothesis, premise]
         examples = BertWordPredict.read_examples(sentences)
         sentences_features, sentence_tokens = BertWordPredict.convert_examples_to_features(examples=examples,
-                                                                                           seq_length=64,
+                                                                                           seq_length=50,
                                                                                            tokenizer=tokenizer)
 
-        hypothesis_vectors = np.asarray(sentences_features[0]).reshape((1, 64))
-        premise_vectors = np.asarray(sentences_features[1]).reshape((1, 64))
+        hypothesis_vectors = np.asarray(sentences_features[0]).reshape((1, 50))
+        premise_vectors = np.asarray(sentences_features[1]).reshape((1, 50))
         outputs = model.predict([hypothesis_vectors, premise_vectors])
         #######################
-        scores = outputs  # [0]
+        scores = outputs[0]
         return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
 
 
