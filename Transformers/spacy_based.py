@@ -7,22 +7,20 @@ import numpy as np
 from Transformers.utils import read_snli, load_spacy_nlp
 
 
-def create_dataset_ids(nlp, texts, hypotheses, num_unk, max_length):
+def create_dataset_ids(nlp, hypothesis, premises, num_unk, max_length):
     """This section creates id matrix of the input tokens"""
 
-    sents = texts + hypotheses
+    sents = hypothesis + premises
     sents_as_ids = []
 
     print("Total number of sentences to be processed = ", len(sents))
-    starttime = datetime.datetime.now()
+    start_time = datetime.datetime.now()
     count = 0
 
     for sent in sents:
         doc = nlp(sent, disable=['parser', 'tagger', 'ner', 'textcat'])
         word_ids = []
         for i, token in enumerate(doc):
-            # i indisi word leri tek tek numaralandırıyor bu sayede max lenght ile karsılastırır.
-            # skip odd spaces from tokenizer
             if token.has_vector and token.vector_norm == 0:
                 continue
             if i > max_length:
@@ -41,14 +39,15 @@ def create_dataset_ids(nlp, texts, hypotheses, num_unk, max_length):
 
         count = count + 1
         if count % 50000 == 0:
-            print("total sentence: " + str(count) + " Total percent: " + str(count / len(sents)))
+            print("total sentence: " + str(count) + " Total percent: " +
+                  str(round(count / len(sents), 6) * 100))
 
-    finishtime = datetime.datetime.now()
-    totaltime = finishtime - starttime
+    finish_time = datetime.datetime.now()
+    total_time = finish_time - start_time
 
-    print("Total time elapse:" + str(totaltime))
-    # text ler ve hipotezleri ayrı ayrı diziler olarak alıyor birinci kısım text - ikinci kısım hipotez
-    return [np.array(sents_as_ids[: len(texts)]), np.array(sents_as_ids[len(texts):])]
+    print("Total time spent to creat ID's of sentences: " + str(total_time))
+
+    return [np.array(sents_as_ids[: len(hypothesis)]), np.array(sents_as_ids[len(hypothesis):])]
 
 
 def get_embeddings(vocab, nr_unk=100):
@@ -63,22 +62,21 @@ def get_embeddings(vocab, nr_unk=100):
     vectors[1: (nr_unk + 1), ] = oov
     for lex in vocab:
         if lex.has_vector and lex.vector_norm > 0:
-            # burada vector olan yerler Cupy dizisi bunu numpy a cevirmek gerekiyormus
-            vectors[nr_unk + 1 + lex.rank] = cp.asnumpy(lex.vector / lex.vector_norm)
+            vectors[nr_unk + lex.rank + 1] = cp.asnumpy(lex.vector / lex.vector_norm)
     # vector shape is [684,925 , 300]
-    print("getting embeddings from spacy vocabulary is finished")
+    print("extracting embeddings from spacy is finished")
 
     return vectors
 
 
 def spacy_word_transformer(path, train_loc, dev_loc, shape, transformer_type):
-    print("Transformer type is ", transformer_type)
 
+    print("Transformer type is ", transformer_type)
+    print("Processing texts using spacy")
     nlp = load_spacy_nlp()
 
     train_texts1, train_texts2, train_labels = read_snli(train_loc)
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-    print("Processing texts using spacy")
 
     if os.path.isfile(path=path + "Processed_SNLI/Spacy_Processed/train_x.pkl"):
         print("Spacy based Pre-Processed train file is found now loading")
@@ -86,7 +84,7 @@ def spacy_word_transformer(path, train_loc, dev_loc, shape, transformer_type):
             train_x = pickle.load(f)
     else:
         print("There is no spacy based pre-processed file of train_X, Pre-Process will start now")
-        train_x = create_dataset_ids(nlp=nlp, texts=train_texts1, hypotheses=train_texts2, num_unk=100,
+        train_x = create_dataset_ids(nlp=nlp, hypothesis=train_texts1, premises=train_texts2, num_unk=100,
                                      max_length=shape[0])
         with open(path + 'Processed_SNLI/Spacy_Processed/train_x.pkl', 'wb') as f:
             pickle.dump(train_x, f)
@@ -97,7 +95,7 @@ def spacy_word_transformer(path, train_loc, dev_loc, shape, transformer_type):
             dev_x = pickle.load(f)
     else:
         print("There is no spacy based pre-processed file of dev_X, Pre-Process will start now")
-        dev_x = create_dataset_ids(nlp=nlp, texts=dev_texts1, hypotheses=dev_texts2, num_unk=100, max_length=shape[0])
+        dev_x = create_dataset_ids(nlp=nlp, hypothesis=dev_texts1, premises=dev_texts2, num_unk=100, max_length=shape[0])
         with open(path + 'Processed_SNLI/Spacy_Processed/dev_x.pkl', 'wb') as f:
             pickle.dump(dev_x, f)
 

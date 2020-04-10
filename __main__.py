@@ -1,38 +1,18 @@
-import importlib
 import os
 import os.path
 import sys
 
 import plac
-from keras import backend as k_backend
 
 from Transformers.bert_sentence_based import bert_sentence_transformer
 from Transformers.bert_word_based import bert_word_based_transformer
 from Transformers.glove_word_based import glove_word_transformer
 from Transformers.spacy_based import spacy_word_transformer
-from Transformers.utils import read_snli, load_spacy_nlp, attention_visualization
+from Transformers.utils import read_snli, load_spacy_nlp, attention_visualization, set_keras_backend
 from model import decomp_attention_model, esim_bilstm_model
 from prediction import SpacyPrediction, BertWordPredict
 
-path = "/media/ulgen/Samsung/contradiction_data/data/"
-
-
-# workaround for keras/tensorflow bug
-# see https://github.com/tensorflow/tensorflow/issues/3388
-
-
-def set_keras_backend(backend):
-    if k_backend.backend() != backend:
-        os.environ["KERAS_BACKEND"] = backend
-        importlib.reload(k_backend)
-        assert k_backend.backend() == backend
-    if backend == "tensorflow":
-        k_backend.get_session().close()
-        cfg = k_backend.tf.ConfigProto()
-        cfg.gpu_options.allow_growth = True
-        k_backend.set_session(k_backend.tf.Session(config=cfg))
-        k_backend.clear_session()
-
+path = "/media/ulgen/Samsung/contradiction_data/"
 
 set_keras_backend("tensorflow")
 
@@ -43,7 +23,7 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
         train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
                                                                                    dev_loc=dev_loc, shape=shape,
                                                                                    transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
+        model = decomp_attention_model(vectors=vectors, shape=shape, settings=settings, train_type=train_type)
 
     elif transformer_type == 'glove':
         train_x, train_labels, dev_x, dev_labels, vectors = glove_word_transformer(path=path, train_loc=train_loc,
@@ -56,7 +36,7 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
                                                                                              train_loc=train_loc,
                                                                                              dev_loc=dev_loc,
                                                                                              transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings)
+        model = decomp_attention_model(vectors=word_weights, shape=shape, settings=settings,train_type=train_type)
 
     elif transformer_type == 'bert_sentence':
         train_x, train_labels, dev_x, dev_labels = bert_sentence_transformer(path=path, train_loc=train_loc,
@@ -81,7 +61,7 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
         os.mkdir(path + 'similarity')
     print("Saving to", path + 'similarity')
 
-    model.save(path + 'similarity/' + "model.h5")
+    model.save(path + 'similarity/' + train_type + "_" + "model.h5")
 
 
 def evaluate(dev_loc, shape):
@@ -94,8 +74,8 @@ def evaluate(dev_loc, shape):
     for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
         doc1 = nlp(text1, disable=['parser', 'tagger', 'ner', 'textcat'])
         doc2 = nlp(text2, disable=['parser', 'tagger', 'ner', 'textcat'])
-        sim, _ = doc1.similarity(doc2)
-        if sim == SpacyPrediction.entailment_types[label.argmax()]:
+        y_prediction, _ = doc1.similarity(doc2)
+        if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
             correct += 1
         total += 1
     return correct, total
@@ -159,7 +139,7 @@ def main(
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=64,  # 64 for word based #1024 for bert sentence
+        max_length=50,  # 48 for word based #1024 for bert sentence
         nr_hidden=200,  # 200
         dropout=0.2,
         learn_rate=0.001,  # 0.001

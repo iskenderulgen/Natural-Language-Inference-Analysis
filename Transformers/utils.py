@@ -1,6 +1,7 @@
 import collections
 import json
-
+import importlib
+import os
 import en_core_web_lg
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,10 +9,23 @@ import seaborn as sns
 import spacy
 import tensorflow as tf
 from keras.utils import to_categorical
-
+from keras import backend as k_backend
 from bert.tokenization import convert_to_unicode
 
 LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
+
+
+def set_keras_backend(backend):
+    if k_backend.backend() != backend:
+        os.environ["KERAS_BACKEND"] = backend
+        importlib.reload(k_backend)
+        assert k_backend.backend() == backend
+    if backend == "tensorflow":
+        k_backend.get_session().close()
+        cfg = k_backend.tf.ConfigProto()
+        cfg.gpu_options.allow_growth = True
+        k_backend.set_session(k_backend.tf.Session(config=cfg))
+        k_backend.clear_session()
 
 
 def read_snli(path):

@@ -19,9 +19,9 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import datetime
 import os
 import pickle
-import random
 
 import numpy as np
 import tensorflow as tf
@@ -30,18 +30,13 @@ from Transformers.utils import read_snli
 from bert import tokenization
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--max_seq_length", type=int, default=64,
+parser.add_argument("--max_seq_length", type=int, default=50,
                     help="The maximum total input sequence length after WordPiece tokenization. "
                          "Sequences longer than this will be truncated, and sequences shorter "
                          "than this will be padded.")
 parser.add_argument("--do_lower_case", type=bool, default=True,
                     help="Whether to lower case the input text. Should be True for uncased "
                          "models and False for cased models.")
-parser.add_argument("--batch_size", type=int, default=32, help="Batch size for predictions.")
-parser.add_argument("--use_tpu", type=bool, default=False, help="Whether to use TPU or GPU/CPU.")
-parser.add_argument("--master", default=None, help="If using a TPU, the address of the master.")
-parser.add_argument("--num_tpu_cores", type=int, default=8,
-                    help="Only used if `use_tpu` is True. Total number of TPU cores to use.")
 parser.add_argument("--use_one_hot_embeddings", type=bool, default=False,
                     help="If True, tf.one_hot will be used for embedding lookups, otherwise "
                          "tf.nn.embedding_lookup will be used. On TPUs, this should be True "
@@ -50,11 +45,12 @@ args = parser.parse_args()
 
 
 def convert_examples_to_features(examples, seq_length, tokenizer):
-    """Loads a data file into a list of `InputBatch`s."""
-    # converts sentences in to features such as id's of the tokens, not full vector representations.
     total_sent_count = len(examples)
     sent_count = 0
     features = []
+
+    start_time = datetime.datetime.now()
+
     for (ex_index, example) in enumerate(examples):
         tokens = tokenizer.tokenize(example)
 
@@ -64,32 +60,23 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
         # This is the part that tokens converted to ids.
         input_ids_raw = tokenizer.convert_tokens_to_ids(tokens)
 
-        # (+100) is reserved for OOV tokens
-        input_ids = []
-        for i in range(len(input_ids_raw)):
-            input_ids.append(100 + input_ids_raw[i])
-
         # pad up to the sequence length.
-        while len(input_ids) < seq_length:
-            # input_ids.append(0)
-            input_ids.append(random.randrange(100))
-        assert len(input_ids) == seq_length
+        while len(input_ids_raw) < seq_length:
+            input_ids_raw.append(0)
+        assert len(input_ids_raw) == seq_length
 
-        # prints 5 example in to the console as an example
-        if ex_index < 5:
-            tf.logging.info("*** Example ***")
-            tf.logging.info("tokens: %s" % " ".join(
-                [tokenization.printable_text(x) for x in tokens]))
-            tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-
-        features.append(input_ids)
+        features.append(input_ids_raw)
 
         sent_count = sent_count + 1
-        if sent_count % 500 == 0:
+        if sent_count % 50000 == 0:
             print("total sentence: " + str(sent_count) + " Total percent: " +
                   str(round(sent_count / total_sent_count, 6) * 100))
 
-        # features stands for the token unique id's that represents vector.
+    finish_time = datetime.datetime.now()
+    total_time = finish_time - start_time
+
+    print("Total time spent to creat ID's of sentences: " + str(total_time))
+
     return features
 
 
@@ -115,10 +102,7 @@ def read_examples(input_sentences):
 def get_word_embedding_matrix(file_name, tensor_name, all_tensors,
                               all_tensor_names=False):
     embeds = []
-    nr_unk = 100
-
-    oov = np.random.normal(size=(100, 1024))
-    oov = oov / oov.sum(axis=1, keepdims=True)
+    bert_vector_size = 30522
 
     reader = tf.pywrap_tensorflow.NewCheckpointReader(file_name)
     if all_tensors or all_tensor_names:
@@ -134,10 +118,8 @@ def get_word_embedding_matrix(file_name, tensor_name, all_tensors,
         # print(reader.get_tensor(tensor_name))
         embeds.append(reader.get_tensor(tensor_name))
 
-    embed_matrix = np.zeros((30522 + nr_unk, 1024), dtype="float32")
-    embed_matrix[0: nr_unk, ] = oov
-    embed_matrix[nr_unk:30522 + nr_unk, ] = np.asarray(embeds)
-
+    embed_matrix = np.zeros((bert_vector_size, 1024), dtype="float32")
+    embed_matrix[0:bert_vector_size] = np.asarray(embeds)
     return embed_matrix
 
 
