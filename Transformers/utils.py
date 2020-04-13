@@ -1,31 +1,33 @@
 import collections
-import json
 import importlib
+import json
 import os
+
 import en_core_web_lg
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import spacy
 import tensorflow as tf
+from keras import backend as K
 from keras.utils import to_categorical
-from keras import backend as k_backend
+
 from bert.tokenization import convert_to_unicode
 
 LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
 
 def set_keras_backend(backend):
-    if k_backend.backend() != backend:
+    if K.backend() != backend:
         os.environ["KERAS_BACKEND"] = backend
-        importlib.reload(k_backend)
-        assert k_backend.backend() == backend
+        importlib.reload(K)
+        assert K.backend() == backend
     if backend == "tensorflow":
-        k_backend.get_session().close()
-        cfg = k_backend.tf.ConfigProto()
+        K.get_session().close()
+        cfg = K.tf.ConfigProto()
         cfg.gpu_options.allow_growth = True
-        k_backend.set_session(k_backend.tf.Session(config=cfg))
-        k_backend.clear_session()
+        K.set_session(K.tf.Session(config=cfg))
+        K.clear_session()
 
 
 def read_snli(path):
@@ -91,3 +93,31 @@ def attention_visualization(tokens1, tokens2, attention1, attention2):
     plt.yticks(rotation=0)
     ax.set_xticklabels([j for j in tokens2])
     plt.show()
+
+
+def precision(y_true, y_pred):
+    y_true, y_pred = K.argmax(y_true, axis=1), K.argmax(y_pred, axis=1)
+    y_true, y_pred = K.cast(y_true, 'float32'), K.cast(y_pred, 'float32')
+    TP = K.sum(K.clip(y_true * y_pred, 0, 1))  # how many
+    predicted_positives = K.sum(K.clip(y_pred, 0, 1))
+    return TP / (predicted_positives + K.epsilon())
+
+
+def recall(y_true, y_pred):
+    y_true, y_pred = K.argmax(y_true, axis=1), K.argmax(y_pred, axis=1)
+    y_true, y_pred = K.cast(y_true, 'float32'), K.cast(y_pred, 'float32')
+    TP = K.sum(K.clip(y_true * y_pred, 0, 1))  # how many
+    # TP = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    # possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    possible_positives = K.sum(K.clip(y_true, 0, 1))
+    return TP / (possible_positives + K.epsilon())
+
+
+def f1_score(y_true, y_pred):
+    # If there are no true positives, fix the F score at 0 like sklearn.
+    if K.sum(K.round(K.clip(y_true, 0, 1))) == 0:
+        return 0
+    p = precision(y_true, y_pred)
+    r = recall(y_true, y_pred)
+    fscore = 2 * (p * r) / (p + r + K.epsilon())
+    return fscore

@@ -133,7 +133,7 @@ def demo(shape, type, visualization):
     nr_epoch=("Number of training epochs", "option", "e", int),
 )
 def main(
-        mode="demo",
+        mode="train",
         train_type="word",
         transformer_type='spacy',
         train_loc=path + "SNLI/snli_train.jsonl",

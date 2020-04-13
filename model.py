@@ -3,6 +3,8 @@ from keras import layers, Model, models, optimizers
 from keras.layers import CuDNNLSTM
 from keras.layers.wrappers import Bidirectional
 
+from Transformers.utils import precision, recall, f1_score
+
 
 def esim_bilstm_model(vectors, shape, settings):
     max_length, nr_hidden, nr_class = shape
@@ -63,7 +65,7 @@ def esim_bilstm_model(vectors, shape, settings):
     model.compile(
         optimizer=optimizers.Adam(lr=settings["lr"]),
         loss="categorical_crossentropy",
-        metrics=["accuracy"],
+        metrics=["accuracy", precision, recall, f1_score],
     )
 
     return model
