@@ -111,7 +111,7 @@ def demo(shape, type, visualization):
 
             attention_visualization(tokens1=tokens1, tokens2=tokens2, attention1=attention1, attention2=attention2)
 
-    elif type == 'bert':
+    elif type == 'bert_word_based':
 
         entailment_type, confidence, attention1, attention2, sent_tokens = BertWordPredict.predict(
             hypothesis=hypothesis, premise=premise, path=path)
@@ -133,18 +133,16 @@ def demo(shape, type, visualization):
     nr_epoch=("Number of training epochs", "option", "e", int),
 )
 def main(
-        mode="train",
-        train_type="word",
-        transformer_type='spacy',
+        mode="demo", train_type="word", transformer_type='spacy',
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
         max_length=50,  # 48 for word based #1024 for bert sentence
         nr_hidden=200,  # 200
         dropout=0.2,
-        learn_rate=0.001,  # 0.001
-        batch_size=100,  # 100 for ESIM
-        nr_epoch=2,
+        learn_rate=0.0005,  # 0.001
+        batch_size=50,  # 100 for ESIM
+        nr_epoch=7,
         attention_visualization=True):
     shape = (max_length, nr_hidden, 3)
     settings = {

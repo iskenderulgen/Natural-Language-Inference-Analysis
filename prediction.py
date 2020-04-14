@@ -9,7 +9,7 @@ import os
 import numpy as np
 from keras import Model
 from keras.models import load_model
-
+from Transformers.utils import precision, recall, f1_score
 from Transformers.utils import attention_visualization
 
 try:
@@ -42,7 +42,11 @@ class SpacyPrediction(object):
         if get_features is None:
             get_features = get_word_ids
 
-        model = load_model(path + 'model(esim_spacy).h5', custom_objects={"tf": tf})
+        model = load_model(path + 'model(esim_spacy).h5', custom_objects={"tf": tf,
+                                                                          "precision": precision,
+                                                                          "recall": recall,
+                                                                          "f1_score": f1_score
+                                                                          })
         print("loading model")
         #############
         model = Model(inputs=model.input,
@@ -125,7 +129,10 @@ class BertWordPredict(object):
     def predict(hypothesis, premise, path):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
-        model = load_model(path + 'similarity/model(esim_spacy).h5', custom_objects={"tf": tf})
+        model = load_model(path + 'similarity/model(esim_bert).h5', custom_objects={"tf": tf,
+                                                                                    "precision": precision,
+                                                                                    "recall": recall,
+                                                                                    "f1_score": f1_score})
         print("loading model")
         model.summary()
         model = Model(inputs=model.input,
@@ -149,10 +156,3 @@ class BertWordPredict(object):
         #######################
         scores = outputs[0]
         return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
-
-
-"""
-,
-                                    model.get_layer('attention_softmax_e1').output,
-                                    model.get_layer('attention_softmax_e2').output
-"""

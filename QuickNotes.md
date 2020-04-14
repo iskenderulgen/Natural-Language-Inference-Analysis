@@ -86,3 +86,10 @@ To pick ideal hidden size =  NS / (a * (Ni + No))
  - a = scaling factor
 
 a works best with 2
+
+
+
+#### 50 batch 7 epoch bert ESIM
+* 647s 1ms/step - loss: 0.2386 - acc: 0.9114 - precision: 0.9631 - recall: 0.9507 - f1_score: 0.9562 - val_loss: 0.3992 - val_acc: 0.8660 - val_precision: 0.9405 - val_recall: 0.9483 - val_f1_score: 0.9436
+#### 50 batch 7 epoch spacy ESIM
+* 631s 1ms/step - loss: 0.2433 - acc: 0.9087 - precision: 0.9619 - recall: 0.9485 - f1_score: 0.9544 - val_loss: 0.4273 - val_acc: 0.8628 - val_precision: 0.9484 - val_recall: 0.9350 - val_f1_score: 0.9409
