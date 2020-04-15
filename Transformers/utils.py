@@ -46,12 +46,22 @@ def read_snli(path):
     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
 
-def load_spacy_nlp():
-    print("Loading spaCy")
-    spacy.prefer_gpu()
-    gpu = spacy.require_gpu()
-    print("GPU:", gpu)
-    nlp = en_core_web_lg.load()
+def load_spacy_nlp(transformer_type):
+    nlp = None
+
+    if transformer_type == 'spacy':
+        print("Loading spaCy Glove Vectors")
+        spacy.prefer_gpu()
+        gpu = spacy.require_gpu()
+        print("GPU:", gpu)
+        nlp = en_core_web_lg.load()
+
+    elif transformer_type == 'fasttext':
+        print("Loading fasttext Vectors")
+        spacy.prefer_gpu()
+        gpu = spacy.require_gpu()
+        print("GPU:", gpu)
+        nlp = spacy.load("/media/ulgen/Samsung/contradiction_data/Fasttext")
 
     return nlp
 

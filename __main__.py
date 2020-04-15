@@ -3,11 +3,11 @@ import os.path
 import sys
 
 import plac
-
 from Transformers.bert_sentence_based import bert_sentence_transformer
 from Transformers.bert_word_based import bert_word_based_transformer
 from Transformers.glove_word_based import glove_word_transformer
 from Transformers.spacy_based import spacy_word_transformer
+from Transformers.fasttext_based import fasttext_word_transformer
 from Transformers.utils import read_snli, load_spacy_nlp, attention_visualization, set_keras_backend
 from model import decomp_attention_model, esim_bilstm_model
 from prediction import SpacyPrediction, BertWordPredict
@@ -15,7 +15,6 @@ from prediction import SpacyPrediction, BertWordPredict
 path = "/media/ulgen/Samsung/contradiction_data/"
 
 set_keras_backend("tensorflow")
-
 
 def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
     train_x, train_labels, dev_x, dev_labels, model = None, None, None, None, None
@@ -30,6 +29,12 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
                                                                                    dev_loc=dev_loc, shape=shape,
                                                                                    transformer_type=transformer_type)
         model = decomp_attention_model(vectors=vectors, shape=shape, settings=settings, train_type=train_type)
+
+    elif transformer_type == 'fasttext':
+        train_x, train_labels, dev_x, dev_labels, vectors = fasttext_word_transformer(path=path, train_loc=train_loc,
+                                                                                      dev_loc=dev_loc, shape=shape,
+                                                                                      transformer_type=transformer_type)
+        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
 
     elif transformer_type == 'bert_word_based':
         train_x, train_labels, dev_x, dev_labels, word_weights = bert_word_based_transformer(path=path,
@@ -64,10 +69,10 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
     model.save(path + 'similarity/' + train_type + "_" + "model.h5")
 
 
-def evaluate(dev_loc, shape):
+def evaluate(dev_loc, shape, transformer_type):
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
     print("evaluation dataset loaded")
-    nlp = load_spacy_nlp()
+    nlp = load_spacy_nlp(transformer_type=transformer_type)
     nlp.add_pipe(SpacyPrediction.load(path=path + "similarity/", max_length=shape[0]))
     total = 0.0
     correct = 0.0
@@ -81,12 +86,12 @@ def evaluate(dev_loc, shape):
     return correct, total
 
 
-def demo(shape, type, visualization):
-    hypothesis = "in the park alice plays a flute solo"
-    premise = "Someone playing music outside"
+def demo(shape, type, visualization, transformer_type):
+    hypothesis = "quitting european union bad for England"
+    premise = "Leaving a group can be beneficial"
 
     if type == 'spacy':
-        nlp = load_spacy_nlp()
+        nlp = load_spacy_nlp(transformer_type=transformer_type)
         nlp.add_pipe(SpacyPrediction.load(path=path + "similarity/", max_length=shape[0]))
         disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
 
@@ -133,7 +138,9 @@ def demo(shape, type, visualization):
     nr_epoch=("Number of training epochs", "option", "e", int),
 )
 def main(
-        mode="demo", train_type="word", transformer_type='spacy',
+        mode="train",
+        train_type="word",
+        transformer_type='fasttext',
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
