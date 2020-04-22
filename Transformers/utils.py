@@ -25,6 +25,7 @@ def set_keras_backend(backend):
     if backend == "tensorflow":
         K.get_session().close()
         cfg = K.tf.ConfigProto()
+        cfg.gpu_options.per_process_memory_fraction = 0.8
         cfg.gpu_options.allow_growth = True
         K.set_session(K.tf.Session(config=cfg))
         K.clear_session()
@@ -62,6 +63,7 @@ def load_spacy_nlp(transformer_type):
         gpu = spacy.require_gpu()
         print("GPU:", gpu)
         nlp = spacy.load("/media/ulgen/Samsung/contradiction_data/Fasttext")
+        print(len(nlp.vocab.vectors))
 
     return nlp
 

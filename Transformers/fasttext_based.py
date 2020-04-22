@@ -74,7 +74,6 @@ def fasttext_word_transformer(path, train_loc, dev_loc, shape, transformer_type)
     print("Transformer type is ", transformer_type)
     print("Processing texts using spacy")
     nlp = load_spacy_nlp(transformer_type=transformer_type)
-
     train_texts1, train_texts2, train_labels = read_snli(train_loc)
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
 
