@@ -6,8 +6,6 @@ from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession
 from scipy import spatial
 
-from bert import extract_features
-
 conf = SparkConf().setMaster("local[*]") \
     .setAppName("Contradiction Pre Process") \
     .set("spark.rdd.compress", "true") \

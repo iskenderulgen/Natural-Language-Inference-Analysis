@@ -39,7 +39,7 @@ def read_snli(path):
         for line in file_:
             eg = json.loads(line)
             label = eg["gold_label"]
-            if label == "-":  # per Parikh, ignore - SNLI entries
+            if label == "-":  # ignore - SNLI entries
                 continue
             texts1.append(eg["sentence1"])
             texts2.append(eg["sentence2"])
@@ -47,11 +47,11 @@ def read_snli(path):
     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
 
-def load_spacy_nlp(transformer_type):
+def load_spacy_nlp(path, transformer_type):
     nlp = None
 
     if transformer_type == 'spacy':
-        print("Loading spaCy Glove Vectors")
+        print("Loading Glove Vectors")
         spacy.prefer_gpu()
         gpu = spacy.require_gpu()
         print("GPU:", gpu)
@@ -62,8 +62,14 @@ def load_spacy_nlp(transformer_type):
         spacy.prefer_gpu()
         gpu = spacy.require_gpu()
         print("GPU:", gpu)
-        nlp = spacy.load("/media/ulgen/Samsung/contradiction_data/Fasttext")
-        print(len(nlp.vocab.vectors))
+        nlp = spacy.load(path + transformer_type)
+
+    elif transformer_type == 'word2vec':
+        print("Loading word2vec Vectors")
+        spacy.prefer_gpu()
+        gpu = spacy.require_gpu()
+        print("GPU:", gpu)
+        nlp = spacy.load(path + transformer_type)
 
     return nlp
 

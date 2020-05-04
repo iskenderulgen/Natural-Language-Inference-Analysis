@@ -6,7 +6,7 @@ import random
 import tensorflow as tf
 import numpy as np
 
-from Transformers.utils import read_snli, load_spacy_nlp
+from pretrained_based.utils import read_snli, load_spacy_nlp
 from bert.tokenization import convert_to_unicode
 
 

@@ -9,7 +9,7 @@ import numpy as np
 from keras import Model
 from keras.models import load_model
 
-from Transformers.utils import precision, recall, f1_score
+from pretrained_based.utils import precision, recall, f1_score
 
 try:
     import cPickle as pickle
@@ -41,11 +41,11 @@ class SpacyPrediction(object):
         if get_features is None:
             get_features = get_word_ids
 
-        model = load_model(path + 'model(esim_fasttext).h5', custom_objects={"tf": tf,
-                                                                          "precision": precision,
-                                                                          "recall": recall,
-                                                                          "f1_score": f1_score
-                                                                          })
+        model = load_model(path + 'model(esim_w2v).h5', custom_objects={"tf": tf,
+                                                                        "precision": precision,
+                                                                        "recall": recall,
+                                                                        "f1_score": f1_score
+                                                                        })
         print("loading model")
         #############
         model = Model(inputs=model.input,

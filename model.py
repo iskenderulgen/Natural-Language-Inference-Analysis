@@ -3,7 +3,7 @@ from keras import layers, Model, models, optimizers
 from keras.layers import CuDNNLSTM
 from keras.layers.wrappers import Bidirectional
 
-from Transformers.utils import precision, recall, f1_score
+from pretrained_based.utils import precision, recall, f1_score
 
 
 def esim_bilstm_model(vectors, shape, settings):

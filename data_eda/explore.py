@@ -1,25 +1,23 @@
+import datetime
 import json
 import os
 import pickle
 
-import en_core_web_lg
-import gensim
-import sklearn
 import spacy
-from gensim.models import Word2Vec
+import en_core_web_lg
 from keras import layers
 import tensorflow as tf
 from keras import layers
-from keras.layers import CuDNNLSTM, np
+from keras.layers import CuDNNLSTM
 from keras.layers.wrappers import Bidirectional
 from keras.utils import to_categorical
 
-from Transformers import utils
+from pretrained_based import utils
 from scipy import spatial
 
-from Transformers.utils import LABELS
+from pretrained_based.utils import LABELS
 
-path = "/media/ulgen/Samsung/contradiction_data/"
+# path = "/media/ulgen/Samsung/contradiction_data/"
 
 # conf = SparkConf().setMaster("local[*]") \
 #     .setAppName("Contradiction Pre Process") \
@@ -162,21 +160,22 @@ path = "/media/ulgen/Samsung/contradiction_data/"
 # spacy.prefer_gpu()
 # gpu = spacy.require_gpu()
 # print("GPU:", gpu)
-# nlp_fasttext = spacy.load("/media/ulgen/Samsung/contradiction_data/Fasttext_pruned")
+# nlp_fasttext = spacy.load("/media/ulgen/Samsung/contradiction_data/word2vec")
 # print(len(nlp_fasttext.vocab.vectors))
 
-from gensim.models import KeyedVectors
 import spacy
 
-gn_path = '/media/ulgen/Samsung/contradiction_data/word2vec/GoogleNews-vectors-negative300.bin'
+from gensim.models.word2vec import Word2Vec
 
-# Load vectors
-gn_model = KeyedVectors.load_word2vec_format(gn_path, binary=True)
+# from gensim.models import KeyedVectors
+# model = KeyedVectors.load_word2vec_format('/media/ulgen/Samsung/contradiction_data/word2vec/GoogleNews-vectors-negative300.bin.gz', binary=True)
+# model.wv.save_word2vec_format('/media/ulgen/Samsung/contradiction_data/word2vec/googlenews.txt')
+path = "/home/ulgen/Desktop/New Folder/"
+transformer_type = "word2vec"
+print("There is no", transformer_type, "based pre-processed file of train_X, Pre-Process will start now")
 
-# Init empty spaCy model
-nlp = spacy.blank('en')
+start_time =  datetime.datetime.now()
+finish_time = datetime.datetime.now()
+total_time = finish_time - start_time
 
-# Load vectors in spaCy instance
-nlp.vocab.vectors = spacy.vocab.Vectors(data=gn_model.vectors, keys=gn_model.index2word)
-
-print(nlp.vocab.vectors.shape)
+print("Total time spent to create token ID's of sentences: ", total_time)

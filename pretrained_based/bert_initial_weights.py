@@ -26,7 +26,7 @@ import pickle
 import numpy as np
 import tensorflow as tf
 
-from Transformers.utils import read_snli
+from pretrained_based.utils import read_snli
 from bert import tokenization
 
 parser = argparse.ArgumentParser()
@@ -69,13 +69,12 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
 
         sent_count = sent_count + 1
         if sent_count % 50000 == 0:
-            print("total sentence: " + str(sent_count) + " Total percent: " +
-                  str(round(sent_count / total_sent_count, 6) * 100))
+            print("Processed sentence: " + str(sent_count) + " Processed percent: " +
+                  str(round(sent_count / total_sent_count, 4) * 100))
 
     finish_time = datetime.datetime.now()
     total_time = finish_time - start_time
-
-    print("Total time spent to creat ID's of sentences: " + str(total_time))
+    print("Total time spent to create token ID's of sentences: ", total_time)
 
     return features
 
@@ -99,8 +98,7 @@ def read_examples(input_sentences):
         return TypeError
 
 
-def get_word_embedding_matrix(file_name, tensor_name, all_tensors,
-                              all_tensor_names=False):
+def extract_initial_word_embedding_matrix(file_name, tensor_name, all_tensors, all_tensor_names=False):
     embeds = []
     bert_vector_size = 30522
 
@@ -174,9 +172,9 @@ def bert_word_based_transformer(path, train_loc, dev_loc, transformer_type):
             word_weights = pickle.load(f)
     else:
         checkpoint_path = path + "bert/bert_model.ckpt"
-        word_weights = get_word_embedding_matrix(file_name=checkpoint_path,
-                                                 tensor_name='bert/embeddings/word_embeddings',
-                                                 all_tensors=False, all_tensor_names=False)
+        word_weights = extract_initial_word_embedding_matrix(file_name=checkpoint_path,
+                                                             tensor_name='bert/embeddings/word_embeddings',
+                                                             all_tensors=False, all_tensor_names=False)
         with open(path + "/Processed_SNLI/Bert_Processed_WordLevel/weights.pkl", 'wb') as f:
             pickle.dump(word_weights, f)
 

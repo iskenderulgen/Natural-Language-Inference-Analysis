@@ -49,8 +49,8 @@ def init_model(
         freqs_loc=None,
         clusters_loc=None,
         jsonl_loc=None,
-        vectors_loc='/media/ulgen/Samsung/contradiction_data/word2vec/wiki-news-300d-1M.vec.zip',
-        prune_vectors=-1,
+        vectors_loc='/media/ulgen/Samsung/contradiction_data/word2vec/googlenews.txt',
+        prune_vectors=685000,
         vectors_name=None,
         model_name='word2vec',
 ):

@@ -25,7 +25,7 @@ import pickle
 import numpy as np
 import tensorflow as tf
 
-from Transformers.utils import read_snli
+from pretrained_based.utils import read_snli
 from bert import modeling, tokenization
 
 parser = argparse.ArgumentParser()

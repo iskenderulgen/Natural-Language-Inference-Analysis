@@ -1,17 +1,16 @@
 import os
 import os.path
 import sys
-import tensorflow as tf
 import plac
-from Transformers.bert_sentence_based import bert_sentence_transformer
-from Transformers.bert_word_based import bert_word_based_transformer
-from Transformers.glove_word_based import glove_word_transformer
-from Transformers.spacy_based import spacy_word_transformer
-from Transformers.fasttext_based import fasttext_word_transformer
-from Transformers.utils import read_snli, load_spacy_nlp, attention_visualization, set_keras_backend
+from prediction_based.bert_sentence_based import bert_sentence_transformer
+from pretrained_based.bert_initial_weights import bert_word_based_transformer
+from data_eda.glove_word_based import glove_word_transformer
+from pretrained_based.word_vectors import spacy_word_transformer
+from pretrained_based.fasttext_based import fasttext_word_transformer
+from pretrained_based.utils import read_snli, load_spacy_nlp, attention_visualization
+from pretrained_based.word2ved_based import word2vec_word_transformer
 from model import decomp_attention_model, esim_bilstm_model
 from prediction import SpacyPrediction, BertWordPredict
-from keras.backend.tensorflow_backend import set_session
 
 path = "/media/ulgen/Samsung/contradiction_data/"
 
@@ -32,6 +31,12 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
 
     elif transformer_type == 'fasttext':
         train_x, train_labels, dev_x, dev_labels, vectors = fasttext_word_transformer(path=path, train_loc=train_loc,
+                                                                                      dev_loc=dev_loc, shape=shape,
+                                                                                      transformer_type=transformer_type)
+        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
+
+    elif transformer_type == 'word2vec':
+        train_x, train_labels, dev_x, dev_labels, vectors = word2vec_word_transformer(path=path, train_loc=train_loc,
                                                                                       dev_loc=dev_loc, shape=shape,
                                                                                       transformer_type=transformer_type)
         model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
@@ -87,7 +92,7 @@ def evaluate(dev_loc, shape, transformer_type):
 
 
 def demo(shape, type, visualization, transformer_type):
-    hypothesis = "in the park alice plays a flute solo"
+    hypothesis = "in the park Alice plays a flute solo"
     premise = "Someone playing music outside"
 
     if type == 'spacy' or 'fasttext':
@@ -138,9 +143,9 @@ def demo(shape, type, visualization, transformer_type):
     nr_epoch=("Number of training epochs", "option", "e", int),
 )
 def main(
-        mode="train",
+        mode="demo",
         train_type="word",
-        transformer_type='fasttext',
+        transformer_type='word2vec',
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
