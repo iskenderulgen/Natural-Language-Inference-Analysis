@@ -2,56 +2,35 @@ import os
 import os.path
 import sys
 import plac
-from prediction_based.bert_sentence_based import bert_sentence_transformer
-from pretrained_based.bert_initial_weights import bert_word_based_transformer
-from data_eda.glove_word_based import glove_word_transformer
+from prediction_based.bert_encoder import bert_transformer
+from pretrained_based.bert_initial_weights import bert_initial_weights_transformer
 from pretrained_based.word_vectors import spacy_word_transformer
-from pretrained_based.fasttext_based import fasttext_word_transformer
-from pretrained_based.utils import read_snli, load_spacy_nlp, attention_visualization
-from pretrained_based.word2ved_based import word2vec_word_transformer
+from utils.utils import read_snli, load_spacy_nlp, attention_visualization
 from model import decomp_attention_model, esim_bilstm_model
 from prediction import SpacyPrediction, BertWordPredict
 
 path = "/media/ulgen/Samsung/contradiction_data/"
 
 
-def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
+def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type):
     train_x, train_labels, dev_x, dev_labels, model = None, None, None, None, None
-    if transformer_type == 'spacy':
+    if transformer_type == 'glove' or 'word2vec' or 'fasttext':
         train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
                                                                                    dev_loc=dev_loc, shape=shape,
                                                                                    transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
+        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings, embedding_type=embedding_type)
 
-    elif transformer_type == 'glove':
-        train_x, train_labels, dev_x, dev_labels, vectors = glove_word_transformer(path=path, train_loc=train_loc,
-                                                                                   dev_loc=dev_loc, shape=shape,
-                                                                                   transformer_type=transformer_type)
-        model = decomp_attention_model(vectors=vectors, shape=shape, settings=settings, train_type=train_type)
-
-    elif transformer_type == 'fasttext':
-        train_x, train_labels, dev_x, dev_labels, vectors = fasttext_word_transformer(path=path, train_loc=train_loc,
-                                                                                      dev_loc=dev_loc, shape=shape,
-                                                                                      transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
-
-    elif transformer_type == 'word2vec':
-        train_x, train_labels, dev_x, dev_labels, vectors = word2vec_word_transformer(path=path, train_loc=train_loc,
-                                                                                      dev_loc=dev_loc, shape=shape,
-                                                                                      transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings)
-
-    elif transformer_type == 'bert_word_based':
-        train_x, train_labels, dev_x, dev_labels, word_weights = bert_word_based_transformer(path=path,
-                                                                                             train_loc=train_loc,
-                                                                                             dev_loc=dev_loc,
-                                                                                             transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings)
+    elif transformer_type == 'bert_initial_word':
+        train_x, train_labels, dev_x, dev_labels, word_weights = bert_initial_weights_transformer(path=path,
+                                                                                                  train_loc=train_loc,
+                                                                                                  dev_loc=dev_loc,
+                                                                                                  transformer_type=transformer_type)
+        model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings, embedding_type=embedding_type)
 
     elif transformer_type == 'bert_sentence':
-        train_x, train_labels, dev_x, dev_labels = bert_sentence_transformer(path=path, train_loc=train_loc,
-                                                                             dev_loc=dev_loc)
-        model = decomp_attention_model(shape=shape, settings=settings, train_type=train_type, vectors=None)
+        train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
+                                                                    dev_loc=dev_loc, feature_type=transformer_type)
+        model = decomp_attention_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
 
     else:
         print("Please define transformer method properly")
@@ -71,19 +50,21 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, train_type):
         os.mkdir(path + 'similarity')
     print("Saving to", path + 'similarity')
 
-    model.save(path + 'similarity/' + train_type + "_" + "model.h5")
+    model.save(path + 'similarity/' + transformer_type + "_" + "model.h5")
 
 
 def evaluate(dev_loc, shape, transformer_type):
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+    disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
     print("evaluation dataset loaded")
-    nlp = load_spacy_nlp(transformer_type=transformer_type)
-    nlp.add_pipe(SpacyPrediction.load(path=path + "similarity/", max_length=shape[0]))
+    nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
+    nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
+                                      max_length=shape[0]))
     total = 0.0
     correct = 0.0
     for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
-        doc1 = nlp(text1, disable=['parser', 'tagger', 'ner', 'textcat'])
-        doc2 = nlp(text2, disable=['parser', 'tagger', 'ner', 'textcat'])
+        doc1 = nlp(text1, disable=disabled_pipelines)
+        doc2 = nlp(text2, disable=disabled_pipelines)
         y_prediction, _ = doc1.similarity(doc2)
         if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
             correct += 1
@@ -92,19 +73,20 @@ def evaluate(dev_loc, shape, transformer_type):
 
 
 def demo(shape, type, visualization, transformer_type):
-    hypothesis = "in the park Alice plays a flute solo"
-    premise = "Someone playing music outside"
+    premise = "in the park Alice plays a flute solo"
+    hypothesis = "Someone playing music outside"
 
-    if type == 'spacy' or 'fasttext':
-        nlp = load_spacy_nlp(transformer_type=transformer_type)
-        nlp.add_pipe(SpacyPrediction.load(path=path + "similarity/", max_length=shape[0]))
+    if type == 'glove' or 'fasttext' or 'word2vec':
+        nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
+        nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
+                                          max_length=shape[0]))
         disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
 
-        doc1 = nlp(hypothesis, disable=disabled_pipelines)
-        doc2 = nlp(premise, disable=disabled_pipelines)
+        doc1 = nlp(premise, disable=disabled_pipelines)
+        doc2 = nlp(hypothesis, disable=disabled_pipelines)
 
-        print("hypothesis:", doc1)
-        print("premise   :", doc2)
+        print("premise:", doc1)
+        print("hypothesis   :", doc2)
 
         entailment_type, confidence, attention1, attention2 = doc1.similarity(doc2)
         print("Entailment type:", entailment_type, "(Confidence:", confidence, ")")
@@ -144,12 +126,12 @@ def demo(shape, type, visualization, transformer_type):
 )
 def main(
         mode="demo",
-        train_type="word",
+        embedding_type="word",
         transformer_type='word2vec',
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=50,  # 48 for word based #1024 for bert sentence
+        max_length=50,  # 48 for word based #1024 for bert_dependencies sentence
         nr_hidden=200,  # 200
         dropout=0.2,
         learn_rate=0.0005,  # 0.001
@@ -169,7 +151,7 @@ def main(
             print("Train mode requires paths to training and development data sets.")
             sys.exit(1)
         train(train_loc=train_loc, dev_loc=dev_loc, shape=shape, settings=settings,
-              transformer_type=transformer_type, train_type=train_type)
+              transformer_type=transformer_type, embedding_type=embedding_type)
     elif mode == "evaluate":
         if dev_loc is None:
             print("Evaluate mode requires paths to test data set.")

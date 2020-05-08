@@ -10,7 +10,7 @@ import pickle
 import cupy as cp
 import numpy as np
 
-from pretrained_based.utils import read_snli, load_spacy_nlp
+from utils.utils import read_snli, load_spacy_nlp
 
 
 def create_dataset_ids(nlp, premises, hypothesis, num_unk, max_length):
@@ -21,7 +21,7 @@ def create_dataset_ids(nlp, premises, hypothesis, num_unk, max_length):
 
     print("Total number of sentences to be processed = ", len(sents))
     start_time = datetime.datetime.now()
-    sent_count = 0
+    processed_sent_count = 0
 
     for sent in sents:
         doc = nlp(sent, disable=['parser', 'tagger', 'ner', 'textcat'])
@@ -43,10 +43,10 @@ def create_dataset_ids(nlp, premises, hypothesis, num_unk, max_length):
         word_id_vec[:clipped_len] = word_ids[:clipped_len]
         sents_as_ids.append(word_id_vec)
 
-        sent_count = sent_count + 1
-        if sent_count % 50000 == 0:
-            print("processed Sentence: " + str(sent_count) + " Processed Percentage: " +
-                  str(round(sent_count / len(sents), 4) * 100))
+        processed_sent_count = processed_sent_count + 1
+        if processed_sent_count % 50000 == 0:
+            print("processed Sentence: " + str(processed_sent_count) + " Processed Percentage: " +
+                  str(round(processed_sent_count / len(sents), 4) * 100))
 
     finish_time = datetime.datetime.now()
     total_time = finish_time - start_time
@@ -75,17 +75,15 @@ def get_embeddings(vocab, nr_unk=100):
 
 
 def spacy_word_transformer(path, train_loc, dev_loc, shape, transformer_type):
-    print("Starting to process using spacy. Transformer type is ", transformer_type)
+    print("Starting to pre-process using spacy. Transformer type is ", transformer_type)
     nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
 
     train_texts1, train_texts2, train_labels = read_snli(train_loc)
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
 
-    if os.path.isdir(path + "Processed_SNLI"):
-        print("Processed_SNLI directory is exist")
-    else:
+    if not os.path.isdir(path + "Processed_SNLI"):
+        print("Processed_SNLI directory is not exist, now created")
         os.mkdir(path + "Processed_SNLI")
-        print("Processed_SNLI directory is created")
 
     if os.path.isfile(path=path + "Processed_SNLI/" + transformer_type + "/train_x.pkl"):
         print(transformer_type, "based Pre-Processed train file is found now loading...")

@@ -1,4 +1,3 @@
-import collections
 import importlib
 import json
 import os
@@ -8,11 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import spacy
-import tensorflow as tf
 from keras import backend as K
 from keras.utils import to_categorical
-
-from bert.tokenization import convert_to_unicode
 
 LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
@@ -50,7 +46,7 @@ def read_snli(path):
 def load_spacy_nlp(path, transformer_type):
     nlp = None
 
-    if transformer_type == 'spacy':
+    if transformer_type == 'glove':
         print("Loading Glove Vectors")
         spacy.prefer_gpu()
         gpu = spacy.require_gpu()
@@ -72,22 +68,6 @@ def load_spacy_nlp(path, transformer_type):
         nlp = spacy.load(path + transformer_type)
 
     return nlp
-
-
-def load_vocab():
-    """Loads a vocabulary file into a dictionary."""
-    vocab = collections.OrderedDict()
-    index = 0
-    with tf.gfile.GFile("/media/ulgen/Samsung/contradiction_data/data/Processed_SNLI/Glove_Processed/vocab.txt",
-                        "r") as reader:
-        while True:
-            token = convert_to_unicode(reader.readline())
-            if not token:
-                break
-            token = token.strip()
-            vocab[token] = index
-            index += 1
-    return vocab
 
 
 def attention_visualization(tokens1, tokens2, attention1, attention2):
@@ -114,28 +94,20 @@ def attention_visualization(tokens1, tokens2, attention1, attention2):
 
 
 def precision(y_true, y_pred):
-    y_true, y_pred = K.argmax(y_true, axis=1), K.argmax(y_pred, axis=1)
-    y_true, y_pred = K.cast(y_true, 'float32'), K.cast(y_pred, 'float32')
-    TP = K.sum(K.clip(y_true * y_pred, 0, 1))  # how many
-    predicted_positives = K.sum(K.clip(y_pred, 0, 1))
-    return TP / (predicted_positives + K.epsilon())
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    precision = true_positives / (predicted_positives + K.epsilon())
+    return precision
 
 
 def recall(y_true, y_pred):
-    y_true, y_pred = K.argmax(y_true, axis=1), K.argmax(y_pred, axis=1)
-    y_true, y_pred = K.cast(y_true, 'float32'), K.cast(y_pred, 'float32')
-    TP = K.sum(K.clip(y_true * y_pred, 0, 1))  # how many
-    # TP = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    # possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
-    possible_positives = K.sum(K.clip(y_true, 0, 1))
-    return TP / (possible_positives + K.epsilon())
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    recall = true_positives / (possible_positives + K.epsilon())
+    return recall
 
 
 def f1_score(y_true, y_pred):
-    # If there are no true positives, fix the F score at 0 like sklearn.
-    if K.sum(K.round(K.clip(y_true, 0, 1))) == 0:
-        return 0
     p = precision(y_true, y_pred)
     r = recall(y_true, y_pred)
-    fscore = 2 * (p * r) / (p + r + K.epsilon())
-    return fscore
+    return (2 * p * r) / (p + r + K.epsilon())

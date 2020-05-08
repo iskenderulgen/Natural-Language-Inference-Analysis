@@ -25,12 +25,12 @@ import pickle
 import numpy as np
 import tensorflow as tf
 
-from pretrained_based.utils import read_snli
-from bert import modeling, tokenization
+from bert_dependencies import modeling, tokenization
+from utils.utils import read_snli
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--layers", type=str, default="-1,-2,-3,-4", help="Choose the layers that will be extracted")
-parser.add_argument("--max_seq_length", type=int, default=64,
+parser.add_argument("--max_seq_length", type=int, default=50,
                     help="The maximum total input sequence length after WordPiece tokenization. "
                          "Sequences longer than this will be truncated, and sequences shorter "
                          "than this will be padded.")
@@ -294,7 +294,7 @@ def read_examples(input_sentences):
     examples = []
     unique_id = 0
     total_sents = len(input_sentences)
-    print(total_sents)
+    print("Total sentences to be processed is:", total_sents)
 
     if type(input_sentences) is np.ndarray or list:
         print("input file is array or list")
@@ -305,9 +305,10 @@ def read_examples(input_sentences):
         return examples, total_sents
 
 
-def sentence_transformer(bert_directory, input_file):
+def sentence_transformer(bert_directory, premises, hypothesis, feature_type):
     tf.logging.set_verbosity(tf.logging.INFO)
 
+    sents = premises + hypothesis
     layer_indexes = [int(x) for x in args.layers.split(",")]
 
     bert_config = modeling.BertConfig.from_json_file(bert_directory + "bert_config.json")
@@ -322,7 +323,7 @@ def sentence_transformer(bert_directory, input_file):
             num_shards=args.num_tpu_cores,
             per_host_input_for_training=is_per_host))
 
-    examples, total_sent_count = read_examples(input_file)
+    examples, total_sent_count = read_examples(sents)
 
     # This is the data which we'll need to export for word based level.
     features = convert_examples_to_features(
@@ -354,55 +355,83 @@ def sentence_transformer(bert_directory, input_file):
     sent_count = 0
     sentence_vectors = []
 
-    for result in estimator.predict(input_fn, yield_single_examples=True):
-        unique_id = int(result["unique_id"])
-        feature = unique_id_to_feature[unique_id]
-        for (i, token) in enumerate(feature.tokens):
-            layers = []
-            for (j, layer_index) in enumerate(layer_indexes):
-                layer_output = result["layer_output_%d" % j]
-                layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
-                layers.append(layers_output_flat)
-            sentence_vectors.append(sum(layers)[:768])
-            print("Token budur = kontrolden sonra sil bu satırı = ", token)
-            break
+    if feature_type == "bert_sentence":
+        for result in estimator.predict(input_fn, yield_single_examples=True):
+            unique_id = int(result["unique_id"])
+            feature = unique_id_to_feature[unique_id]
+            for (i, token) in enumerate(feature.tokens):
+                all_layers = []
+                for (j, layer_index) in enumerate(layer_indexes):
+                    layer_output = result["layer_output_%d" % j]
+                    layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
+                    all_layers.append(layers_output_flat)
+                sentence_vectors.append(sum(all_layers)[:1024])
+                print("Token budur = kontrolden sonra sil bu satırı = ", token)
+                break
 
-        sent_count = sent_count + 1
-        if sent_count % 50000 == 0:
-            print("total sentence: " + str(sent_count) + " Total percent: " + str(
-                sent_count / total_sent_count))
+            sent_count = sent_count + 1
+            if sent_count % 50000 == 0:
+                print("total sentence: " + str(sent_count) + " Total percent: " + str(
+                    sent_count / total_sent_count))
 
-    print("its finished")
-    return sentence_vectors
+        print("Pre Processing using Bert prediction based sentence encoder is finished. Vectors are now being saved")
+        return [np.array(sentence_vectors[: len(premises)]), np.array(sentence_vectors[len(premises):])]
+
+    elif feature_type == "bert_word":
+        for result in estimator.predict(input_fn, yield_single_examples=True):
+            unique_id = int(result["unique_id"])
+            feature = unique_id_to_feature[unique_id]
+            for (i, token) in enumerate(feature.tokens):
+                if token == "[CLS]" or "[SEP]":
+                    continue
+                else:
+                    all_layers = []
+                    for (j, layer_index) in enumerate(layer_indexes):
+                        layer_output = result["layer_output_%d" % j]
+                        layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
+                        all_layers.append(layers_output_flat)
+                    sentence_vectors.append(sum(all_layers)[:1024])
+                    print("Token budur = kontrolden sonra sil bu satırı = ", token)
+
+            sent_count = sent_count + 1
+            if sent_count % 50000 == 0:
+                print("total sentence: " + str(sent_count) + " Total percent: " + str(
+                    sent_count / total_sent_count))
+
+        print("Pre Processing using Bert prediction based word-token encoder is finished. Vectors now is being saved")
+        return [np.array(sentence_vectors[: len(premises)]), np.array(sentence_vectors[len(premises):])]
 
 
-def bert_sentence_transformer(path, train_loc, dev_loc):
+def bert_transformer(path, train_loc, dev_loc, feature_type):
+    print("Pre - Processing sentences using prediction based bert_dependencies sentence approach")
+
     train_texts1, train_texts2, train_labels = read_snli(train_loc)
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
 
-    print("Processing using bert sentence approach")
-    if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed_Sentence/train_x.pkl"):
+    if not os.path.isdir(path + "Processed_SNLI"):
+        print("Processed_SNLI directory is not exist, now created")
+        os.mkdir(path + "Processed_SNLI")
+
+    if os.path.isfile(path=path + "Processed_SNLI/" + feature_type + "/train_x.pkl"):
         print("Pre-Processed train file is found now loading")
-        with open(path + 'Processed_SNLI/Bert_Processed_Sentence/train_x.pkl', 'rb') as f:
+        with open(path + "Processed_SNLI/" + feature_type + "/train_x.pkl", "rb") as f:
             train_x = pickle.load(f)
     else:
         print("There is no pre-processed file of train_X, Pre-Process will start now")
-        train_sentences = train_texts1 + train_texts2
-        vectors_train = sentence_transformer(bert_directory=path + "/bert", input_file=train_sentences)
-        train_x = [np.array(vectors_train[: len(train_texts1)]), np.array(vectors_train[len(train_texts2):])]
-        with open(path + 'Processed_SNLI/Bert_Processed_Sentence/train_x.pkl', 'wb') as f:
+        train_x = sentence_transformer(bert_directory=path + "/bert", premises=train_texts1,
+                                       hypothesis=train_texts2, feature_type=feature_type)
+        with open(path + "Processed_SNLI/" + feature_type + "/train_x.pkl", "wb") as f:
             pickle.dump(train_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    if os.path.isfile(path=path + "Processed_SNLI/Bert_Processed_Sentence/dev_x.pkl"):
+    if os.path.isfile(path=path + "Processed_SNLI/" + feature_type + "/dev_x.pkl"):
         print("Pre-Processed dev file is found now loading")
-        with open(path + 'Processed_SNLI/Bert_Processed_Sentence/dev_x.pkl', 'rb') as f:
+        with open(path + "Processed_SNLI/" + feature_type + "/dev_x.pkl", "rb") as f:
             dev_x = pickle.load(f)
     else:
         print("There is no pre-processed file of dev_X, Pre-Process will start now")
-        dev_sentences = dev_texts1 + dev_texts2
-        vectors_dev = sentence_transformer(bert_directory=path + "/bert", input_file=dev_sentences)
-        dev_x = [np.array(vectors_dev[: len(dev_texts1)]), np.array(vectors_dev[len(dev_texts2):])]
-        with open(path + 'Processed_SNLI/Bert_Processed_Sentence/dev_x.pkl', 'wb') as f:
+        dev_x = sentence_transformer(bert_directory=path + "/bert", premises=dev_texts1,
+                                     hypothesis=dev_texts2, feature_type=feature_type)
+        with open(path + "Processed_SNLI/" + feature_type + "/dev_x.pkl", "wb") as f:
             pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     return train_x, train_labels, dev_x, dev_labels

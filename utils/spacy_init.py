@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 import gzip
 import math
 import os
-import sys
 import tarfile
 import zipfile
 from ast import literal_eval
@@ -13,6 +12,7 @@ from pathlib import Path
 import numpy
 import plac
 import srsly
+from gensim.models import KeyedVectors
 from preshed.counter import PreshCounter
 from spacy.errors import Errors, Warnings, user_warning
 from spacy.util import ensure_path, get_lang_class
@@ -49,7 +49,7 @@ def init_model(
         freqs_loc=None,
         clusters_loc=None,
         jsonl_loc=None,
-        vectors_loc='/media/ulgen/Samsung/contradiction_data/word2vec/googlenews.txt',
+        vectors_loc='/media/ulgen/Samsung/contradiction_data/GoogleNews-vectors-negative300.bin',
         prune_vectors=685000,
         vectors_name=None,
         model_name='word2vec',
@@ -112,6 +112,11 @@ def open_file(loc):
         names = zip_file.namelist()
         file_ = zip_file.open(names[0])
         return (line.decode("utf8") for line in file_)
+    elif loc.parts[-1].endswith("bin"):
+        model = KeyedVectors.load_word2vec_format(loc, binary=True)
+        loc = loc.replace('GoogleNews-vectors-negative300.bin', 'googlenews.txt')
+        model.wv.save_word2vec_format(loc)
+        return loc.open("r", encoding="utf8")
     else:
         return loc.open("r", encoding="utf8")
 

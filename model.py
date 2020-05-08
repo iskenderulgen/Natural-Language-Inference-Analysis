@@ -3,24 +3,36 @@ from keras import layers, Model, models, optimizers
 from keras.layers import CuDNNLSTM
 from keras.layers.wrappers import Bidirectional
 
-from pretrained_based.utils import precision, recall, f1_score
+from utils.utils import precision, recall, f1_score
 
 
-def esim_bilstm_model(vectors, shape, settings):
+def esim_bilstm_model(vectors, shape, settings, embedding_type):
     max_length, nr_hidden, nr_class = shape
+    input1, input2, x1, x2 = None, None, None, None
 
     bilstm1 = Bidirectional(CuDNNLSTM(nr_hidden, return_sequences=True))
     bilstm2 = Bidirectional(CuDNNLSTM(nr_hidden, return_sequences=True))
 
-    i1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
-    print("input 1 is :", K.shape(i1))
-    i2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
-    print("input 2 is :", K.shape(i2))
+    if embedding_type == 'word':
+        input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
+        input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
 
-    embed = word_embedding_layer(vectors, max_length, nr_hidden)
+        embed = word_embedding_layer(vectors, max_length, nr_hidden)
 
-    x1 = embed(i1)
-    x2 = embed(i2)
+        x1 = embed(input1)
+        x2 = embed(input2)
+
+    elif embedding_type == 'sentence':
+        input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
+        input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
+
+        bert = sentence_embedding_layer(projected_dim=nr_hidden)
+
+        x1 = bert(input1)
+        x2 = bert(input2)
+
+    else:
+        print("unknown embedding type, Embedding type can only be 'word' or 'sentence' ")
 
     x1 = bilstm1(x1)
     x2 = bilstm1(x2)
@@ -60,7 +72,7 @@ def esim_bilstm_model(vectors, shape, settings):
     y = layers.Dropout(0.2)(y)
     y = layers.Dense(3, activation='softmax')(y)
 
-    model = Model(inputs=[i1, i2], outputs=[y])
+    model = Model(inputs=[input1, input2], outputs=[y])
 
     model.compile(
         optimizer=optimizers.Adam(lr=settings["lr"]),
@@ -71,59 +83,46 @@ def esim_bilstm_model(vectors, shape, settings):
     return model
 
 
-def decomp_attention_model(vectors, shape, settings, train_type):
-    # shape = 64 , 200 , 3
+def decomp_attention_model(vectors, shape, settings, embedding_type):
     max_length, nr_hidden, nr_class = shape
-    input1, input2, a, b = None, None, None, None
-    if train_type == "word":
-        input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
-        print("input 1 is :", K.shape(input1))
-        input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
-        print("input 2 is :", K.shape(input2))
+    input1, input2, x1, x2 = None, None, None, None
 
-        # embeddings (projected)
-        # vector shape is [684,825 , 300] -> for spacy
-        # vector shape is [35,622 , 1024] -> for bert
+    if embedding_type == "word":
+        input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
+        input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
+
         embed = word_embedding_layer(vectors, max_length, nr_hidden)
 
-        a = embed(input1)
-        print("a is :", K.shape(a))
-        b = embed(input2)
-        print("b is :", K.shape(b))
+        x1 = embed(input1)
+        x2 = embed(input2)
 
-    elif train_type == "sentence":
+    elif embedding_type == "sentence":
 
         input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
-        print("input 1 shape is :", K.shape(input1))
-
         input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
-        print("input 2 shape is :", K.shape(input2))
 
         bert = sentence_embedding_layer(projected_dim=nr_hidden)
 
-        a = bert(input1)
-        print("a shape is :", K.shape(a))
-
-        b = bert(input2)
-        print("b shape is :", K.shape(b))
+        x1 = bert(input1)
+        x2 = bert(input2)
 
     else:
-        print("unknown model type")
+        print("unknown embedding type, Embedding type can only be 'word' or 'sentence' ")
 
     # step 1: attend
     F = create_feedforward(num_units=nr_hidden)
-    att_weights = layers.dot([F(a), F(b)], axes=-1)
+    att_weights = layers.dot([F(x1), F(x2)], axes=-1)
 
     G = create_feedforward(num_units=nr_hidden)
 
     norm_weights_a = layers.Lambda(normalizer(1), name='attention_softmax_e1')(att_weights)
     norm_weights_b = layers.Lambda(normalizer(2), name='attention_softmax_e2')(att_weights)
-    alpha = layers.dot([norm_weights_a, a], axes=1, name='self_attend_a')
-    beta = layers.dot([norm_weights_b, b], axes=1, name='self_attend_b')
+    alpha = layers.dot([norm_weights_a, x1], axes=1, name='self_attend_a')
+    beta = layers.dot([norm_weights_b, x2], axes=1, name='self_attend_b')
 
     # step 2: compare
-    comp1 = layers.concatenate([a, beta])
-    comp2 = layers.concatenate([b, alpha])
+    comp1 = layers.concatenate([x1, beta])
+    comp2 = layers.concatenate([x2, alpha])
     v1 = layers.TimeDistributed(G)(comp1)
     v2 = layers.TimeDistributed(G)(comp2)
 
@@ -141,7 +140,7 @@ def decomp_attention_model(vectors, shape, settings, train_type):
     model.compile(
         optimizer=optimizers.Adam(lr=settings["lr"]),
         loss="categorical_crossentropy",
-        metrics=["accuracy"],
+        metrics=["accuracy", precision, recall, f1_score],
     )
 
     return model
@@ -165,18 +164,13 @@ def word_embedding_layer(vectors, max_length, projected_dim):
     return models.Sequential(
         [
             layers.Embedding(
-                # vocab / vector size - total word vector size
                 vectors.shape[0],
-                # dimension of word vectors (300 or 1024)
                 vectors.shape[1],
-                # max sequence length (64 words max)
                 input_length=max_length,
                 weights=[vectors],
                 trainable=False,
             ),
             layers.TimeDistributed(
-                # 200 dim projected layer
-                # turns (?,64,300) layer to (?,64,200)
                 layers.Dense(projected_dim, activation=None, use_bias=False)
             ),
         ]

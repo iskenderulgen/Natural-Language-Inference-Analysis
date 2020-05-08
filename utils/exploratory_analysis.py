@@ -1,5 +1,5 @@
 import argparse
-
+from prediction_based import bert_encoder
 import matplotlib.pyplot as plt
 import pandas as pd
 from pyspark import SparkConf, SparkContext
@@ -25,11 +25,11 @@ parser.add_argument('--dataset', type=str, default='SNLI/snli_test.jsonl',
 parser.add_argument('--data_type', type=str, default='Processed_SNLI/train/',
                     help='data type, Processed_SNLI/train/ - Processed_SNLI/test/ or Processed_SNLI/dev/')
 parser.add_argument('--bert_directory', type=str, default=path + "bert/",
-                    help='main directory for the bert files')
+                    help='main directory for the bert_dependencies files')
 args = parser.parse_args()
 
 
-def data_splitter(main_path, dataset):
+def data_read_preparation(main_path, dataset):
     dataframe = spark.read.json(main_path + dataset)
     print("Total rows in dataframe = ", dataframe.count())
     print(dataframe.show(5))
@@ -48,20 +48,25 @@ def data_splitter(main_path, dataset):
 
 
 def get_vectors_and_sims(sentence_pairs, label_def):
-    sent1 = sentence_pairs['sentence1'].to_numpy()
-    sent1_vectors = extract_features.main(bert_directory=args.bert_directory, input_file=sent1)
-    sentence_pairs.insert(loc=1, column='sentence1_vectors', value=pd.DataFrame(data={'A': sent1_vectors}),
+    premises = sentence_pairs['sentence1'].to_numpy()
+    hypothesis = sentence_pairs['sentence2'].to_numpy()
+
+    sentence_vectors = bert_encoder.sentence_transformer(bert_directory=args.bert_directory, premises=premises,
+                                                         hypothesis=hypothesis, feature_type="bert_sentence")
+
+    premises_vectors = sentence_vectors[0]
+    hypothesis_vectors = sentence_vectors[1]
+
+    sentence_pairs.insert(loc=1, column='premises_vectors', value=pd.DataFrame(data={'A': premises_vectors}),
                           allow_duplicates=True)
 
-    sent2 = sentence_pairs['sentence2'].to_numpy()
-    sent2_vectors = extract_features.main(bert_directory=args.bert_directory, input_file=sent2)
-    sentence_pairs.insert(loc=4, column='sentence2_vectors', value=pd.DataFrame(data={'A': sent2_vectors}),
+    sentence_pairs.insert(loc=4, column='hypothesis_vectors', value=pd.DataFrame(data={'A': hypothesis_vectors}),
                           allow_duplicates=True)
 
-    similarity_frame = similarity(sent1_vectors, sent2_vectors)
+    similarity_frame = similarity(premises_vectors, hypothesis_vectors)
     sentence_pairs.insert(loc=5, column=label_def + '_similarity', value=similarity_frame, allow_duplicates=True)
     data_save(sentence_pairs, main_path=path, data_type=args.data_type, label_definition=label_def)
-    print(label_def + " vectors are extracted")
+    print(label_def, " vectors are extracted")
 
 
 def similarity(array1, array2):
@@ -92,7 +97,6 @@ def plotting(data_dir, data_type):
                 manage_ticks=True, autorange=True, meanline=True)
     plt.savefig(path + data_type + 'Similarity.png', bbox_inches='tight')
     plt.show()
-
 
 
 if __name__ == "__main__":

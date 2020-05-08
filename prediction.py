@@ -1,22 +1,15 @@
-"""
-TO-DO
-This section is to be re-designed to cover any model that can be imported.
-Currently its out of order.
-
-"""
-
 import numpy as np
 from keras import Model
 from keras.models import load_model
 
-from pretrained_based.utils import precision, recall, f1_score
+from utils.utils import precision, recall, f1_score
 
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
 import tensorflow as tf
-from bert import tokenization
+from bert_dependencies import tokenization
 
 
 def get_word_ids(docs, max_length=100, nr_unk=100):
@@ -41,11 +34,8 @@ class SpacyPrediction(object):
         if get_features is None:
             get_features = get_word_ids
 
-        model = load_model(path + 'model(esim_w2v).h5', custom_objects={"tf": tf,
-                                                                        "precision": precision,
-                                                                        "recall": recall,
-                                                                        "f1_score": f1_score
-                                                                        })
+        model = load_model(path, custom_objects={"tf": tf, "precision": precision,
+                                                 "recall": recall, "f1_score": f1_score})
         print("loading model")
         #############
         model = Model(inputs=model.input,
@@ -128,10 +118,8 @@ class BertWordPredict(object):
     def predict(hypothesis, premise, path):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
-        model = load_model(path + 'similarity/model(esim_bert).h5', custom_objects={"tf": tf,
-                                                                                    "precision": precision,
-                                                                                    "recall": recall,
-                                                                                    "f1_score": f1_score})
+        model = load_model(path, custom_objects={"tf": tf, "precision": precision,
+                                                 "recall": recall, "f1_score": f1_score})
         print("loading model")
         model.summary()
         model = Model(inputs=model.input,
@@ -141,7 +129,7 @@ class BertWordPredict(object):
 
         print("Loaded model from disk")
         tokenizer = tokenization.FullTokenizer(
-            vocab_file=path + "bert/vocab.txt", do_lower_case=True)
+            vocab_file=path + "bert_dependencies/vocab.txt", do_lower_case=True)
 
         sentences = [hypothesis, premise]
         examples = BertWordPredict.read_examples(sentences)
@@ -152,6 +140,6 @@ class BertWordPredict(object):
         hypothesis_vectors = np.asarray(sentences_features[0]).reshape((1, 50))
         premise_vectors = np.asarray(sentences_features[1]).reshape((1, 50))
         outputs = model.predict([hypothesis_vectors, premise_vectors])
-        #######################
+
         scores = outputs[0]
         return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens

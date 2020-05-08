@@ -147,7 +147,7 @@ class BertModel(object):
           token_type_ids: (optional) int32 Tensor of shape [batch_size, seq_length].
           use_one_hot_embeddings: (optional) bool. Whether to use one-hot word
             embeddings or tf.embedding_lookup() for the word embeddings.
-          scope: (optional) variable scope. Defaults to "bert".
+          scope: (optional) variable scope. Defaults to "bert_dependencies".
 
         Raises:
           ValueError: The config is invalid or one of the input tensor shapes
@@ -168,7 +168,7 @@ class BertModel(object):
         if token_type_ids is None:
             token_type_ids = tf.zeros(shape=[batch_size, seq_length], dtype=tf.int32)
 
-        with tf.variable_scope(scope, default_name="bert"):
+        with tf.variable_scope(scope, default_name="bert_dependencies"):
             with tf.variable_scope("embeddings"):
                 # Perform embedding lookup on the word ids.
                 (self.embedding_output, self.embedding_table) = embedding_lookup(
