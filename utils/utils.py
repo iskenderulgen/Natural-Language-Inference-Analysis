@@ -70,7 +70,7 @@ def load_spacy_nlp(path, transformer_type):
     return nlp
 
 
-def attention_visualization(tokens1, tokens2, attention1, attention2):
+def attention_visualization(tokens1, tokens2, attention1, attention2, path, transformer_type):
     length_sent1 = len(tokens1)
     length_sent2 = len(tokens2)
 
@@ -90,7 +90,10 @@ def attention_visualization(tokens1, tokens2, attention1, attention2):
     ax.set_yticklabels([i for i in tokens1])
     plt.yticks(rotation=0)
     ax.set_xticklabels([j for j in tokens2])
+    fig1 = plt.gcf()
     plt.show()
+    plt.draw()
+    fig1.savefig(path + 'attention_maps/' + transformer_type + '.png')
 
 
 def precision(y_true, y_pred):

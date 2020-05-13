@@ -1,6 +1,5 @@
-import os
-import pickle
-import numpy as np
+from pyspark import SparkConf, SparkContext
+from pyspark.sql import SparkSession
 
 """Pandas numpy transformation."""
 # df = pd.read_json(path+'Processed_SNLI/train/neutral.json')['sentence1_vectors'].to_numpy()
@@ -77,5 +76,29 @@ import numpy as np
 # f.close()
 # vocab_txt.close()
 
-from gensim.models import KeyedVectors
-model = KeyedVectors.load_word2vec_format('/media/ulgen/Samsung/contradiction_data/GoogleNews-vectors-negative300.bin', binary=True)
+
+conf = SparkConf().setMaster("local[*]") \
+    .setAppName("Contradiction Pre Process") \
+    .set("spark.rdd.compress", "true") \
+    .set("spark.driver.memory", "10G")
+sc = SparkContext(conf=conf)
+sc.setLogLevel("ERROR")
+spark = SparkSession \
+    .builder \
+    .config(conf=conf) \
+    .getOrCreate()
+
+path = "/media/ulgen/Samsung/contradiction_data/SNLI/snli_test.jsonl"
+
+
+def data_read_preparation(main_path):
+    dataframe = spark.read.json(main_path)
+    print("Total rows in dataframe = ", dataframe.count())
+    print(dataframe.show(5))
+
+    dataframe.createOrReplaceTempView(name="SNLI")
+    spark.sql(
+        "SELECT sentence1, gold_label, sentence2 FROM SNLI ").show(200, truncate=False)
+
+data_read_preparation(main_path=path)
+# WHERE gold_label == 'entailment'

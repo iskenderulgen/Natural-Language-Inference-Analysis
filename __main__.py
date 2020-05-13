@@ -72,11 +72,11 @@ def evaluate(dev_loc, shape, transformer_type):
     return correct, total
 
 
-def demo(shape, type, visualization, transformer_type):
-    premise = "in the park Alice plays a flute solo"
-    hypothesis = "Someone playing music outside"
+def demo(shape, visualization, transformer_type):
+    premise = "Men wearing blue uniforms sit on a bus"
+    hypothesis = "Men drive the bus into the ocean"
 
-    if type == 'glove' or 'fasttext' or 'word2vec':
+    if transformer_type == 'glove':# or 'fasttext' or 'word2vec':
         nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
         nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
                                           max_length=shape[0]))
@@ -101,16 +101,17 @@ def demo(shape, type, visualization, transformer_type):
             tokens1 = sents_to_words(doc=doc1)
             tokens2 = sents_to_words(doc=doc2)
 
-            attention_visualization(tokens1=tokens1, tokens2=tokens2, attention1=attention1, attention2=attention2)
+            attention_visualization(tokens1=tokens1, tokens2=tokens2, attention1=attention1, attention2=attention2,
+                                    path=path, transformer_type=transformer_type)
 
-    elif type == 'bert_word_based':
+    elif transformer_type == 'bert_initial_word':
 
         entailment_type, confidence, attention1, attention2, sent_tokens = BertWordPredict.predict(
-            hypothesis=hypothesis, premise=premise, path=path)
+            premise=premise,hypothesis=hypothesis, path=path,transformer_type=transformer_type)
         print("Entailment type:", entailment_type, "(Confidence:", confidence, ")")
 
         attention_visualization(tokens1=sent_tokens[0], tokens2=sent_tokens[1], attention1=attention1,
-                                attention2=attention2)
+                                attention2=attention2, path=path, transformer_type=transformer_type)
 
 
 @plac.annotations(
@@ -127,7 +128,7 @@ def demo(shape, type, visualization, transformer_type):
 def main(
         mode="demo",
         embedding_type="word",
-        transformer_type='word2vec',
+        transformer_type='bert_initial_word',
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
@@ -159,7 +160,7 @@ def main(
         correct, total = evaluate(test_loc, shape, transformer_type=transformer_type)
         print(correct, "/", total, correct / total)
     else:
-        demo(shape, type=transformer_type, visualization=attention_visualization, transformer_type=transformer_type)
+        demo(shape, transformer_type=transformer_type, visualization=attention_visualization)
 
 
 if __name__ == "__main__":

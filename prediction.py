@@ -115,11 +115,12 @@ class BertWordPredict(object):
         return features, sentence_tokens
 
     @staticmethod
-    def predict(hypothesis, premise, path):
+    def predict(premise, hypothesis, path, transformer_type):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
-        model = load_model(path, custom_objects={"tf": tf, "precision": precision,
-                                                 "recall": recall, "f1_score": f1_score})
+        model = load_model(path + 'similarity/' + transformer_type + "_" + "model.h5"
+                           , custom_objects={"tf": tf, "precision": precision,
+                                             "recall": recall, "f1_score": f1_score})
         print("loading model")
         model.summary()
         model = Model(inputs=model.input,
@@ -129,17 +130,17 @@ class BertWordPredict(object):
 
         print("Loaded model from disk")
         tokenizer = tokenization.FullTokenizer(
-            vocab_file=path + "bert_dependencies/vocab.txt", do_lower_case=True)
+            vocab_file=path + "bert/vocab.txt", do_lower_case=True)
 
-        sentences = [hypothesis, premise]
+        sentences = [premise, hypothesis]
         examples = BertWordPredict.read_examples(sentences)
         sentences_features, sentence_tokens = BertWordPredict.convert_examples_to_features(examples=examples,
                                                                                            seq_length=50,
                                                                                            tokenizer=tokenizer)
 
-        hypothesis_vectors = np.asarray(sentences_features[0]).reshape((1, 50))
-        premise_vectors = np.asarray(sentences_features[1]).reshape((1, 50))
-        outputs = model.predict([hypothesis_vectors, premise_vectors])
+        premise_vectors = np.asarray(sentences_features[0]).reshape((1, 50))
+        hypothesis_vectors = np.asarray(sentences_features[1]).reshape((1, 50))
+        outputs = model.predict([premise_vectors, hypothesis_vectors])
 
         scores = outputs[0]
         return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
