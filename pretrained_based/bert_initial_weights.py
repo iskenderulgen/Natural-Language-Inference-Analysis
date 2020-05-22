@@ -61,7 +61,7 @@ def convert_examples_to_features(path, premises, hypothesis, seq_length):
     start_time = datetime.datetime.now()
 
     tokenizer = tokenization.FullTokenizer(
-        vocab_file=path + "bert_dependencies/vocab.txt", do_lower_case=args.do_lower_case)
+        vocab_file=path + "transformers/bert/vocab.txt", do_lower_case=args.do_lower_case)
 
     for (ex_index, example) in enumerate(sents):
         line = tokenization.convert_to_unicode(example).strip()
@@ -152,13 +152,13 @@ def bert_initial_weights_transformer(path, train_loc, dev_loc, transformer_type)
         with open(path + "Processed_SNLI/"+transformer_type+"/weights.pkl", "rb") as f:
             word_weights = pickle.load(f)
     else:
-        checkpoint_path = path + "bert_dependencies/bert_model.ckpt"
+        checkpoint_path = path + "transformers/bert/bert_model.ckpt"
         word_weights = extract_initial_word_embedding_matrix(file_name=checkpoint_path,
-                                                             tensor_name='bert_dependencies/embeddings/word_embeddings',
+                                                             tensor_name='bert/embeddings/word_embeddings',
                                                              all_tensors=False, all_tensor_names=False)
         with open(path + "/Processed_SNLI/"+transformer_type+"/weights.pkl", 'wb') as f:
             pickle.dump(word_weights, f)
 
-    print("bert_dependencies initial-word-weights based feature extraction and embedding matrix extraction completed")
+    print("bert initial-word-weights based feature extraction and embedding matrix extraction completed")
 
     return train_x, train_labels, dev_x, dev_labels, word_weights

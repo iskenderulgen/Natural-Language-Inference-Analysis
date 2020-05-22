@@ -44,7 +44,7 @@ def create_dataset_ids(nlp, premises, hypothesis, num_unk, max_length):
         sents_as_ids.append(word_id_vec)
 
         processed_sent_count = processed_sent_count + 1
-        if processed_sent_count % 50000 == 0:
+        if processed_sent_count % 5000 == 0:
             print("processed Sentence: " + str(processed_sent_count) + " Processed Percentage: " +
                   str(round(processed_sent_count / len(sents), 4) * 100))
 
@@ -109,12 +109,12 @@ def spacy_word_transformer(path, train_loc, dev_loc, shape, transformer_type):
 
     if os.path.isfile(path=path + "Processed_SNLI/" + transformer_type + "/weights.pkl"):
         print(transformer_type, "weights matrix already extracted, now loading...")
-        with open(path + "Processed_SNLI/" + transformer_type + "/spacy_weights.pkl", "rb") as f:
+        with open(path + "Processed_SNLI/" + transformer_type + "/weights.pkl", "rb") as f:
             vectors = pickle.load(f)
     else:
         print(transformer_type, " weight matrix is not found, now extracting...")
         vectors = get_embeddings(vocab=nlp.vocab, nr_unk=100)
-        with open(path + "Processed_SNLI/" + transformer_type + "/spacy_weights.pkl", "wb") as f:
+        with open(path + "Processed_SNLI/" + transformer_type + "/weights.pkl", "wb") as f:
             pickle.dump(vectors, f)
 
     return train_x, train_labels, dev_x, dev_labels, vectors

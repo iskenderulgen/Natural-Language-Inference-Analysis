@@ -9,6 +9,7 @@ import seaborn as sns
 import spacy
 from keras import backend as K
 from keras.utils import to_categorical
+from spacy.util import ensure_path
 
 LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
@@ -58,14 +59,14 @@ def load_spacy_nlp(path, transformer_type):
         spacy.prefer_gpu()
         gpu = spacy.require_gpu()
         print("GPU:", gpu)
-        nlp = spacy.load(path + transformer_type)
+        nlp = spacy.load(path + "transformers/" + transformer_type)
 
     elif transformer_type == 'word2vec':
         print("Loading word2vec Vectors")
         spacy.prefer_gpu()
         gpu = spacy.require_gpu()
         print("GPU:", gpu)
-        nlp = spacy.load(path + transformer_type)
+        nlp = spacy.load(path + "transformers/" + transformer_type)
 
     return nlp
 

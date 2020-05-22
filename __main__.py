@@ -1,20 +1,23 @@
 import os
 import os.path
 import sys
+
 import plac
+
+from model import decomp_attention_model, esim_bilstm_model
+from prediction import SpacyPrediction, BertWordPredict
 from prediction_based.bert_encoder import bert_transformer
+from prediction_based.elmo_hub import elmo_transformer
 from pretrained_based.bert_initial_weights import bert_initial_weights_transformer
 from pretrained_based.word_vectors import spacy_word_transformer
 from utils.utils import read_snli, load_spacy_nlp, attention_visualization
-from model import decomp_attention_model, esim_bilstm_model
-from prediction import SpacyPrediction, BertWordPredict
 
 path = "/media/ulgen/Samsung/contradiction_data/"
 
 
 def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type):
     train_x, train_labels, dev_x, dev_labels, model = None, None, None, None, None
-    if transformer_type == 'glove' or 'word2vec' or 'fasttext':
+    if transformer_type == 'glove': #or 'word2vec' or 'fasttext':
         train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
                                                                                    dev_loc=dev_loc, shape=shape,
                                                                                    transformer_type=transformer_type)
@@ -30,7 +33,17 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
     elif transformer_type == 'bert_sentence':
         train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
                                                                     dev_loc=dev_loc, feature_type=transformer_type)
-        model = decomp_attention_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
+        model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
+
+    elif transformer_type == 'bert_word':
+        train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
+                                                                    dev_loc=dev_loc, feature_type=transformer_type)
+        model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
+
+    elif transformer_type == 'elmo':
+        train_x, train_labels, dev_x, dev_labels = elmo_transformer(path=path, train_loc=train_loc,
+                                                                    dev_loc=dev_loc, feature_type=transformer_type)
+        model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
 
     else:
         print("Please define transformer method properly")
@@ -126,17 +139,17 @@ def demo(shape, visualization, transformer_type):
     nr_epoch=("Number of training epochs", "option", "e", int),
 )
 def main(
-        mode="demo",
-        embedding_type="word",
-        transformer_type='bert_initial_word',
+        mode="train",
+        embedding_type="sentence",
+        transformer_type='bert_sentence',
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
         max_length=50,  # 48 for word based #1024 for bert_dependencies sentence
-        nr_hidden=200,  # 200
+        nr_hidden=400,  # 200
         dropout=0.2,
         learn_rate=0.0005,  # 0.001
-        batch_size=50,  # 100 for ESIM
+        batch_size=50,
         nr_epoch=7,
         attention_visualization=True):
     shape = (max_length, nr_hidden, 3)

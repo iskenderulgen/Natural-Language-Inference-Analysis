@@ -1,5 +1,11 @@
+import json
+import pickle
+
+from keras.utils import to_categorical
+import numpy as np
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession
+from spacy.util import ensure_path
 
 """Pandas numpy transformation."""
 # df = pd.read_json(path+'Processed_SNLI/train/neutral.json')['sentence1_vectors'].to_numpy()
@@ -77,28 +83,60 @@ from pyspark.sql import SparkSession
 # vocab_txt.close()
 
 
-conf = SparkConf().setMaster("local[*]") \
-    .setAppName("Contradiction Pre Process") \
-    .set("spark.rdd.compress", "true") \
-    .set("spark.driver.memory", "10G")
-sc = SparkContext(conf=conf)
-sc.setLogLevel("ERROR")
-spark = SparkSession \
-    .builder \
-    .config(conf=conf) \
-    .getOrCreate()
-
-path = "/media/ulgen/Samsung/contradiction_data/SNLI/snli_test.jsonl"
-
-
-def data_read_preparation(main_path):
-    dataframe = spark.read.json(main_path)
-    print("Total rows in dataframe = ", dataframe.count())
-    print(dataframe.show(5))
-
-    dataframe.createOrReplaceTempView(name="SNLI")
-    spark.sql(
-        "SELECT sentence1, gold_label, sentence2 FROM SNLI ").show(200, truncate=False)
-
-data_read_preparation(main_path=path)
+# conf = SparkConf().setMaster("local[*]") \
+#     .setAppName("Contradiction Pre Process") \
+#     .set("spark.rdd.compress", "true") \
+#     .set("spark.driver.memory", "10G")
+# sc = SparkContext(conf=conf)
+# sc.setLogLevel("ERROR")
+# spark = SparkSession \
+#     .builder \
+#     .config(conf=conf) \
+#     .getOrCreate()
+#
+# path = "/media/ulgen/Samsung/contradiction_data/SNLI/snli_test.jsonl"
+#
+#
+# def data_read_preparation(main_path):
+#     dataframe = spark.read.json(main_path)
+#     print("Total rows in dataframe = ", dataframe.count())
+#     print(dataframe.show(5))
+#
+#     dataframe.createOrReplaceTempView(name="SNLI")
+#     spark.sql(
+#         "SELECT sentence1, gold_label, sentence2 FROM SNLI ").show(200, truncate=False)
+#
+# data_read_preparation(main_path=path)
 # WHERE gold_label == 'entailment'
+LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
+
+path = "/media/ulgen/Samsung/contradiction_data/SNLI/"
+
+# def read_snli(path):
+#     texts1 = []
+#     texts2 = []
+#     labels = []
+#     loc = ensure_path(path)
+#     limit = None
+#     if loc.parts[-1].endswith("snli_train.jsonl"):
+#         limit = 60000
+#     elif loc.parts[-1].endswith("snli_dev.jsonl"):
+#         limit = 1000
+#     elif loc.parts[-1].endswith("snli_test.jsonl"):
+#         limit = 1000
+#     count = 0
+#     with open(path, "r") as file_:
+#         for line in file_:
+#             while count < limit:
+#                 eg = json.loads(line)
+#                 label = eg["gold_label"]
+#                 if label == "-":  # ignore - SNLI entries
+#                     continue
+#                 texts1.append(eg["sentence1"])
+#                 texts2.append(eg["sentence2"])
+#                 labels.append(LABELS[label])
+#                 count = count + 1
+#     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
+#
+# t1,t2,lab = read_snli(path+"snli_dev.jsonl")
+# print(len(t1))
