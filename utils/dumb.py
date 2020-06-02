@@ -140,3 +140,16 @@ path = "/media/ulgen/Samsung/contradiction_data/SNLI/"
 #
 # t1,t2,lab = read_snli(path+"snli_dev.jsonl")
 # print(len(t1))
+
+
+with open("/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert_sentence/dev_x.pkl", "rb") as f:
+    train_x = pickle.load(f)
+print(np.asarray(train_x).shape)
+print()
+
+#print(np.asarray(train_x).shape)
+# new = np.asarray(train_x).squeeze(axis=2)
+# final = [np.array(new[: 549367]), np.array(new[549367:])]
+#
+# with open("/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert_sentence/train_x.pkl", "wb") as f:
+#     pickle.dump(new, f, protocol=pickle.HIGHEST_PROTOCOL)

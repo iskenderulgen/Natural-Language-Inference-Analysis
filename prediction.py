@@ -2,7 +2,6 @@ import numpy as np
 from keras import Model
 from keras.models import load_model
 
-from utils.utils import precision, recall, f1_score
 
 try:
     import cPickle as pickle
@@ -11,10 +10,9 @@ except ImportError:
 import tensorflow as tf
 from bert_dependencies import tokenization
 
-
+from utils.utils import precision, recall, f1_score
 def get_word_ids(docs, max_length=100, nr_unk=100):
     xs = np.zeros((len(docs), max_length), dtype="int32")
-    print(xs.shape)
     for i, doc in enumerate(docs):
         for j, token in enumerate(doc):
             if j == max_length:
@@ -119,8 +117,7 @@ class BertWordPredict(object):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
         model = load_model(path + 'similarity/' + transformer_type + "_" + "model.h5"
-                           , custom_objects={"tf": tf, "precision": precision,
-                                             "recall": recall, "f1_score": f1_score})
+                           , custom_objects={"tf": tf})
         print("loading model")
         model.summary()
         model = Model(inputs=model.input,
@@ -130,7 +127,7 @@ class BertWordPredict(object):
 
         print("Loaded model from disk")
         tokenizer = tokenization.FullTokenizer(
-            vocab_file=path + "bert/vocab.txt", do_lower_case=True)
+            vocab_file=path + "transformers/bert/vocab.txt", do_lower_case=True)
 
         sentences = [premise, hypothesis]
         examples = BertWordPredict.read_examples(sentences)

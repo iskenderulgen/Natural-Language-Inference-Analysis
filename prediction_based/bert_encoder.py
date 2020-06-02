@@ -29,7 +29,7 @@ from bert_dependencies import modeling, tokenization
 from utils.utils import read_snli
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--layers", type=str, default="-1,-2,-3,-4", help="Choose the layers that will be extracted")
+parser.add_argument("--layers", type=str, default="-1", help="Choose the layers that will be extracted")
 parser.add_argument("--max_seq_length", type=int, default=50,
                     help="The maximum total input sequence length after WordPiece tokenization. "
                          "Sequences longer than this will be truncated, and sequences shorter "
@@ -137,7 +137,7 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
             use_one_hot_embeddings=use_one_hot_embeddings)
 
         if mode != tf.estimator.ModeKeys.PREDICT:
-            raise ValueError("Only PREDICT modes are supported: %s" % (mode))
+            raise ValueError("Only PREDICT modes are supported: %s" % mode)
 
         tvars = tf.trainable_variables()
         scaffold_fn = None
@@ -353,51 +353,24 @@ def sentence_transformer(bert_directory, premises, hypothesis, feature_type):
     processed_sent_count = 0
     sentence_vectors = []
 
-    if feature_type == "bert_sentence":
-        for result in estimator.predict(input_fn, yield_single_examples=True):
-            unique_id = int(result["unique_id"])
-            feature = unique_id_to_feature[unique_id]
-            for (i, token) in enumerate(feature.tokens):
-                all_layers = []
-                for (j, layer_index) in enumerate(layer_indexes):
-                    layer_output = result["layer_output_%d" % j]
-                    layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
-                    all_layers.append(layers_output_flat)
-                sentence_vectors.append(sum(np.asarray(all_layers))[:1024])
-                # print("Token budur = kontrolden sonra sil bu satırı = ", token)
-                break
+    for result in estimator.predict(input_fn, yield_single_examples=True):
+        unique_id = int(result["unique_id"])
+        feature = unique_id_to_feature[unique_id]
+        for (i, token) in enumerate(feature.tokens):
+            for (j, layer_index) in enumerate(layer_indexes):
+                layer_output = result["layer_output_%d" % j]
+                layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
+                sentence_vectors.append(layers_output_flat)
+            # print("Token budur = kontrolden sonra sil bu satırı = ", token)
+            break
 
-            processed_sent_count = processed_sent_count + 1
-            if processed_sent_count % 5000 == 0:
-                print("processed Sentence: " + str(processed_sent_count) + " Processed Percentage: " +
-                      str(round(processed_sent_count / len(sents), 4) * 100))
+        processed_sent_count = processed_sent_count + 1
+        if processed_sent_count % 5000 == 0:
+            print("processed Sentence: " + str(processed_sent_count) + " Processed Percentage: " +
+                  str(round(processed_sent_count / len(sents), 4) * 100))
 
-        print("Pre Processing using Bert prediction based sentence encoder is finished. Vectors are now being saved")
-        return [np.array(sentence_vectors[: len(premises)]), np.array(sentence_vectors[len(premises):])]
-
-    elif feature_type == "bert_word":
-        for result in estimator.predict(input_fn, yield_single_examples=True):
-            unique_id = int(result["unique_id"])
-            feature = unique_id_to_feature[unique_id]
-            for (i, token) in enumerate(feature.tokens):
-                if token == "[CLS]" or "[SEP]":
-                    continue
-                else:
-                    all_layers = []
-                    for (j, layer_index) in enumerate(layer_indexes):
-                        layer_output = result["layer_output_%d" % j]
-                        layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
-                        all_layers.append(layers_output_flat)
-                    sentence_vectors.append(sum(np.asarray(all_layers))[:1024])
-                    # print("Token budur = kontrolden sonra sil bu satırı = ", token)
-
-            processed_sent_count = processed_sent_count + 1
-            if processed_sent_count % 5000 == 0:
-                print("processed Sentence: " + str(processed_sent_count) + " Processed Percentage: " +
-                      str(round(processed_sent_count / len(sents), 4) * 100))
-
-        print("Pre Processing using Bert prediction based word-token encoder is finished. Vectors now is being saved")
-        return [np.array(sentence_vectors[: len(premises)]), np.array(sentence_vectors[len(premises):])]
+    print("Pre Processing using Bert prediction based sentence encoder is finished. Vectors are now being saved")
+    return [np.array(sentence_vectors[: len(premises)]), np.array(sentence_vectors[len(premises):])]
 
 
 def bert_transformer(path, train_loc, dev_loc, feature_type):

@@ -1,9 +1,7 @@
 from keras import backend as K
-from keras import layers, Model, models, optimizers
-from keras.layers import CuDNNLSTM
+from keras import layers, Model, models, optimizers, regularizers
+from keras.layers import CuDNNLSTM, LSTM
 from keras.layers.wrappers import Bidirectional
-
-from utils.utils import precision, recall, f1_score
 
 
 def esim_bilstm_model(vectors, shape, settings, embedding_type):
@@ -26,10 +24,10 @@ def esim_bilstm_model(vectors, shape, settings, embedding_type):
         input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
         input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
 
-        bert = sentence_embedding_layer(projected_dim=nr_hidden)
+        embed = sentence_embedding_layer(projected_dim=nr_hidden)
 
-        x1 = bert(input1)
-        x2 = bert(input2)
+        x1 = embed(input1)
+        x2 = embed(input2)
 
     else:
         print("unknown embedding type, Embedding type can only be 'word' or 'sentence' ")
@@ -77,7 +75,7 @@ def esim_bilstm_model(vectors, shape, settings, embedding_type):
     model.compile(
         optimizer=optimizers.Adam(lr=settings["lr"]),
         loss="categorical_crossentropy",
-        metrics=["accuracy", precision, recall, f1_score],
+        metrics=["accuracy"],
     )
 
     return model
@@ -140,7 +138,7 @@ def decomp_attention_model(vectors, shape, settings, embedding_type):
     model.compile(
         optimizer=optimizers.Adam(lr=settings["lr"]),
         loss="categorical_crossentropy",
-        metrics=["accuracy", precision, recall, f1_score],
+        metrics=["accuracy"],
     )
 
     return model

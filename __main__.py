@@ -3,8 +3,9 @@ import os.path
 import sys
 
 import plac
+from keras.callbacks import EarlyStopping
 
-from model import decomp_attention_model, esim_bilstm_model
+from model import esim_bilstm_model, decomp_attention_model
 from prediction import SpacyPrediction, BertWordPredict
 from prediction_based.bert_encoder import bert_transformer
 from prediction_based.elmo_hub import elmo_transformer
@@ -17,7 +18,7 @@ path = "/media/ulgen/Samsung/contradiction_data/"
 
 def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type):
     train_x, train_labels, dev_x, dev_labels, model = None, None, None, None, None
-    if transformer_type == 'glove': #or 'word2vec' or 'fasttext':
+    if transformer_type == 'glove':  # or 'word2vec' or 'fasttext':
         train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
                                                                                    dev_loc=dev_loc, shape=shape,
                                                                                    transformer_type=transformer_type)
@@ -35,28 +36,20 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
                                                                     dev_loc=dev_loc, feature_type=transformer_type)
         model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
 
-    elif transformer_type == 'bert_word':
-        train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
-                                                                    dev_loc=dev_loc, feature_type=transformer_type)
-        model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
-
-    elif transformer_type == 'elmo':
-        train_x, train_labels, dev_x, dev_labels = elmo_transformer(path=path, train_loc=train_loc,
-                                                                    dev_loc=dev_loc, feature_type=transformer_type)
-        model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
-
     else:
         print("Please define transformer method properly")
 
     model.summary()
 
+    # es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=3)
     model.fit(
         train_x,
         train_labels,
         validation_data=(dev_x, dev_labels),
         epochs=settings["nr_epoch"],
         batch_size=settings["batch_size"],
-        verbose=1
+        verbose=1,
+        # callbacks=[es]
     )
 
     if not os.path.isdir(path + 'similarity'):
@@ -67,27 +60,44 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
 
 
 def evaluate(dev_loc, shape, transformer_type):
-    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-    disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
-    print("evaluation dataset loaded")
-    nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
-    nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
-                                      max_length=shape[0]))
-    total = 0.0
-    correct = 0.0
-    for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
-        doc1 = nlp(text1, disable=disabled_pipelines)
-        doc2 = nlp(text2, disable=disabled_pipelines)
-        y_prediction, _ = doc1.similarity(doc2)
-        if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
-            correct += 1
+
+    if transformer_type == 'glove':
+        dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+        disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
+        print("evaluation dataset loaded")
+        nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
+        nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
+                                          max_length=shape[0]))
+        total = 0.0
+        true_p = 0.0
+        for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
+            doc1 = nlp(text1, disable=disabled_pipelines)
+            doc2 = nlp(text2, disable=disabled_pipelines)
+            y_prediction, _, _, _ = doc1.similarity(doc2)
+            if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
+                true_p += 1
+            total += 1
+        print("Entailment Model Accuracy is", true_p / total)
+
+    elif transformer_type == 'bert_initial_word':
+        dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+        print("evaluation dataset loaded")
+        total = 0.0
+        true_p = 0.0
+        for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
+            y_pred, confidence, attention1, attention2, sent_tokens = BertWordPredict.predict(
+                premise=text1, hypothesis=text2, path=path, transformer_type=transformer_type)
+        if y_pred == SpacyPrediction.entailment_types[label.argmax()]:
+            true_p += 1
         total += 1
-    return correct, total
+        print("Entailment Model Accuracy is", true_p / total)
+
+    return true_p, total
 
 
 def demo(shape, visualization, transformer_type):
-    premise = "Men wearing blue uniforms sit on a bus"
-    hypothesis = "Men drive the bus into the ocean"
+    premise = "If platforms were not immune under the law, then they would not risk the legal liability that could come with hosting Donald Trump's lies, defamation and threats"
+    hypothesis ="Hes basically trying to make Twitter and facebook liable for hosting his incredible amount of provably harmful lies"
 
     if transformer_type == 'glove':# or 'fasttext' or 'word2vec':
         nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
@@ -120,37 +130,27 @@ def demo(shape, visualization, transformer_type):
     elif transformer_type == 'bert_initial_word':
 
         entailment_type, confidence, attention1, attention2, sent_tokens = BertWordPredict.predict(
-            premise=premise,hypothesis=hypothesis, path=path,transformer_type=transformer_type)
+            premise=premise, hypothesis=hypothesis, path=path, transformer_type=transformer_type)
         print("Entailment type:", entailment_type, "(Confidence:", confidence, ")")
 
-        attention_visualization(tokens1=sent_tokens[0], tokens2=sent_tokens[1], attention1=attention1,
-                                attention2=attention2, path=path, transformer_type=transformer_type)
+        if visualization:
+            attention_visualization(tokens1=sent_tokens[0], tokens2=sent_tokens[1], attention1=attention1,
+                                    attention2=attention2, path=path, transformer_type=transformer_type)
 
 
-@plac.annotations(
-    mode=("Mode to execute", "positional", None, str, ["train", "evaluate", "demo"]),
-    train_loc=("Path to training data", "option", "t", str),
-    dev_loc=("Path to development or test data", "option", "s", str),
-    max_length=("Length to truncate sentences", "option", "L", int),
-    nr_hidden=("Number of hidden units", "option", "H", int),
-    dropout=("Dropout level", "option", "d", float),
-    learn_rate=("Learning rate", "option", "r", float),
-    batch_size=("Batch size for neural network training", "option", "b", int),
-    nr_epoch=("Number of training epochs", "option", "e", int),
-)
 def main(
-        mode="train",
-        embedding_type="sentence",
-        transformer_type='bert_sentence',
+        mode="demo",
+        embedding_type="word",
+        transformer_type="bert_initial_word",
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=50,  # 48 for word based #1024 for bert_dependencies sentence
-        nr_hidden=400,  # 200
+        max_length=50,  # 50 for word based #1024 for bert_dependencies sentence
+        nr_hidden=300,
         dropout=0.2,
-        learn_rate=0.0005,  # 0.001
-        batch_size=50,
-        nr_epoch=7,
+        learn_rate=0.0004,
+        batch_size=32,
+        nr_epoch=5,
         attention_visualization=True):
     shape = (max_length, nr_hidden, 3)
     settings = {
@@ -170,8 +170,7 @@ def main(
         if dev_loc is None:
             print("Evaluate mode requires paths to test data set.")
             sys.exit(1)
-        correct, total = evaluate(test_loc, shape, transformer_type=transformer_type)
-        print(correct, "/", total, correct / total)
+        evaluate(test_loc, shape, transformer_type=transformer_type)
     else:
         demo(shape, transformer_type=transformer_type, visualization=attention_visualization)
 

@@ -7,6 +7,8 @@ import tensorflow_hub as hub
 
 from utils.utils import read_snli, load_spacy_nlp
 
+path = "/media/ulgen/Samsung/contradiction_data/"
+
 
 def sentence_transformer(path, premises, hypothesis, nlp):
     sents = premises + hypothesis
@@ -34,7 +36,9 @@ def sentence_transformer(path, premises, hypothesis, nlp):
         if i > 50:
             tokens_length[n] = 50
 
-    elmo = hub.Module(path + "elmo", trainable=True)
+    print("tokenization is finished embbeddings are starting")
+
+    elmo = hub.Module(path + "transformers/elmo", trainable=True)
     embeddings = elmo(inputs={"tokens": sentence_tokens, "sequence_len": tokens_length},
                       signature="tokens",
                       as_dict=True)["elmo"]
@@ -84,3 +88,4 @@ def elmo_transformer(path, train_loc, dev_loc, feature_type):
             pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     return train_x, train_labels, dev_x, dev_labels
+

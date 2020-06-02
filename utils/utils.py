@@ -22,7 +22,7 @@ def set_keras_backend(backend):
     if backend == "tensorflow":
         K.get_session().close()
         cfg = K.tf.ConfigProto()
-        cfg.gpu_options.per_process_memory_fraction = 0.8
+        #cfg.gpu_options.per_process_memory_fraction = 0.8
         cfg.gpu_options.allow_growth = True
         K.set_session(K.tf.Session(config=cfg))
         K.clear_session()
@@ -85,12 +85,13 @@ def attention_visualization(tokens1, tokens2, attention1, attention2, path, tran
 
     plt.subplots(figsize=(10, 10))
 
-    ax = sns.heatmap(attentions_scores.reshape((length_sent1, length_sent2)), linewidths=0.5, annot=True,
+    ax = sns.heatmap(attentions_scores.reshape((length_sent1, length_sent2)), linewidths=0.5, annot=False,
                      cbar=True, cmap="Blues")
 
     ax.set_yticklabels([i for i in tokens1])
     plt.yticks(rotation=0)
     ax.set_xticklabels([j for j in tokens2])
+    plt.xticks(rotation=90)
     fig1 = plt.gcf()
     plt.show()
     plt.draw()
