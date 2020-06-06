@@ -35,7 +35,7 @@ from utils.utils import read_snli
 from bert_dependencies import tokenization
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--max_seq_length", type=int, default=50,
+parser.add_argument("--max_seq_length", type=int, default=64,
                     help="The maximum total input sequence length after WordPiece tokenization. "
                          "Sequences longer than this will be truncated, and sequences shorter "
                          "than this will be padded.")

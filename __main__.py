@@ -4,11 +4,10 @@ import sys
 
 import plac
 from keras.callbacks import EarlyStopping
-
+import matplotlib.pyplot as plt
 from model import esim_bilstm_model, decomp_attention_model
 from prediction import SpacyPrediction, BertWordPredict
 from prediction_based.bert_encoder import bert_transformer
-from prediction_based.elmo_hub import elmo_transformer
 from pretrained_based.bert_initial_weights import bert_initial_weights_transformer
 from pretrained_based.word_vectors import spacy_word_transformer
 from utils.utils import read_snli, load_spacy_nlp, attention_visualization
@@ -41,16 +40,35 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
 
     model.summary()
 
-    # es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=3)
-    model.fit(
+    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=5, restore_best_weights=True)
+    history = model.fit(
         train_x,
         train_labels,
         validation_data=(dev_x, dev_labels),
         epochs=settings["nr_epoch"],
         batch_size=settings["batch_size"],
         verbose=1,
-        # callbacks=[es]
+        callbacks=[es]
     )
+
+    # summarize history for accuracy
+    plt.plot(history.history['accuracy'])
+    plt.plot(history.history['val_accuracy'])
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+    # summarize history for loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+
+    print('\nhistory dict:', history.history)
 
     if not os.path.isdir(path + 'similarity'):
         os.mkdir(path + 'similarity')
@@ -60,46 +78,31 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
 
 
 def evaluate(dev_loc, shape, transformer_type):
-
-    if transformer_type == 'glove':
-        dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-        disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
-        print("evaluation dataset loaded")
-        nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
-        nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
-                                          max_length=shape[0]))
-        total = 0.0
-        true_p = 0.0
-        for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
-            doc1 = nlp(text1, disable=disabled_pipelines)
-            doc2 = nlp(text2, disable=disabled_pipelines)
-            y_prediction, _, _, _ = doc1.similarity(doc2)
-            if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
-                true_p += 1
-            total += 1
-        print("Entailment Model Accuracy is", true_p / total)
-
-    elif transformer_type == 'bert_initial_word':
-        dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-        print("evaluation dataset loaded")
-        total = 0.0
-        true_p = 0.0
-        for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
-            y_pred, confidence, attention1, attention2, sent_tokens = BertWordPredict.predict(
-                premise=text1, hypothesis=text2, path=path, transformer_type=transformer_type)
-        if y_pred == SpacyPrediction.entailment_types[label.argmax()]:
+    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+    disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
+    print("evaluation dataset loaded")
+    nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
+    nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
+                                      max_length=shape[0]))
+    total = 0.0
+    true_p = 0.0
+    for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
+        doc1 = nlp(text1, disable=disabled_pipelines)
+        doc2 = nlp(text2, disable=disabled_pipelines)
+        y_prediction, _, _, _ = doc1.similarity(doc2)
+        if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
             true_p += 1
         total += 1
-        print("Entailment Model Accuracy is", true_p / total)
+    print("Entailment Model Accuracy is", true_p / total)
 
     return true_p, total
 
 
 def demo(shape, visualization, transformer_type):
-    premise = "If platforms were not immune under the law, then they would not risk the legal liability that could come with hosting Donald Trump's lies, defamation and threats"
-    hypothesis ="Hes basically trying to make Twitter and facebook liable for hosting his incredible amount of provably harmful lies"
+    premise = "all i have to say on this issue is that there is actual evidence to support evolution!!"
+    hypothesis = "I have to contradict phro and say that the peppered moths do show evidence of evolution. The data may have been insufficient, but evolution did occur. When different alleles are expressed due to external factors, this is evolution."
 
-    if transformer_type == 'glove':# or 'fasttext' or 'word2vec':
+    if transformer_type == 'glove':#  or 'fasttext' or 'word2vec':
         nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
         nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
                                           max_length=shape[0]))
@@ -139,18 +142,18 @@ def demo(shape, visualization, transformer_type):
 
 
 def main(
-        mode="demo",
+        mode="train",
         embedding_type="word",
         transformer_type="bert_initial_word",
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=50,  # 50 for word based #1024 for bert_dependencies sentence
+        max_length=64,  # 50 for word based #1024 for bert_dependencies sentence
         nr_hidden=300,
         dropout=0.2,
         learn_rate=0.0004,
         batch_size=32,
-        nr_epoch=5,
+        nr_epoch=10,
         attention_visualization=True):
     shape = (max_length, nr_hidden, 3)
     settings = {

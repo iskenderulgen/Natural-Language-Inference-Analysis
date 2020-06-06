@@ -153,3 +153,21 @@ print()
 #
 # with open("/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert_sentence/train_x.pkl", "wb") as f:
 #     pickle.dump(new, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+"""
+
+    elif transformer_type == 'bert_initial_word':
+        dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+        print("evaluation dataset loaded")
+        total = 0.0
+        true_p = 0.0
+        for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
+            y_pred, confidence, attention1, attention2, sent_tokens = BertWordPredict.predict(
+                premise=text1, hypothesis=text2, path=path, transformer_type=transformer_type)
+        if y_pred == SpacyPrediction.entailment_types[label.argmax()]:
+            true_p += 1
+        total += 1
+        print("Entailment Model Accuracy is", true_p / total)
+
+"""

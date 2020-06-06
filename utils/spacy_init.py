@@ -45,11 +45,11 @@ DEFAULT_OOV_PROB = -20
 )
 def init_model(
         lang='en',
-        output_dir='/media/ulgen/Samsung/contradiction_data/word2vec/',
+        output_dir='/media/ulgen/Samsung/contradiction_data/fasttext/',
         freqs_loc=None,
         clusters_loc=None,
         jsonl_loc=None,
-        vectors_loc='/media/ulgen/Samsung/contradiction_data/GoogleNews-vectors-negative300.bin',
+        vectors_loc='/home/ulgen/Downloads/crawl-300d-2M.vec.zip',
         prune_vectors=685000,
         vectors_name=None,
         model_name='word2vec',

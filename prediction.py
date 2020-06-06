@@ -2,7 +2,6 @@ import numpy as np
 from keras import Model
 from keras.models import load_model
 
-
 try:
     import cPickle as pickle
 except ImportError:
@@ -10,7 +9,7 @@ except ImportError:
 import tensorflow as tf
 from bert_dependencies import tokenization
 
-from utils.utils import precision, recall, f1_score
+
 def get_word_ids(docs, max_length=100, nr_unk=100):
     xs = np.zeros((len(docs), max_length), dtype="int32")
     for i, doc in enumerate(docs):
@@ -32,8 +31,7 @@ class SpacyPrediction(object):
         if get_features is None:
             get_features = get_word_ids
 
-        model = load_model(path, custom_objects={"tf": tf, "precision": precision,
-                                                 "recall": recall, "f1_score": f1_score})
+        model = load_model(path, custom_objects={"tf": tf})
         print("loading model")
         #############
         model = Model(inputs=model.input,
@@ -132,11 +130,11 @@ class BertWordPredict(object):
         sentences = [premise, hypothesis]
         examples = BertWordPredict.read_examples(sentences)
         sentences_features, sentence_tokens = BertWordPredict.convert_examples_to_features(examples=examples,
-                                                                                           seq_length=50,
+                                                                                           seq_length=64,
                                                                                            tokenizer=tokenizer)
 
-        premise_vectors = np.asarray(sentences_features[0]).reshape((1, 50))
-        hypothesis_vectors = np.asarray(sentences_features[1]).reshape((1, 50))
+        premise_vectors = np.asarray(sentences_features[0]).reshape((1, 64))
+        hypothesis_vectors = np.asarray(sentences_features[1]).reshape((1, 64))
         outputs = model.predict([premise_vectors, hypothesis_vectors])
 
         scores = outputs[0]

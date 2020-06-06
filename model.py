@@ -1,6 +1,6 @@
 from keras import backend as K
 from keras import layers, Model, models, optimizers, regularizers
-from keras.layers import CuDNNLSTM, LSTM
+from keras.layers import CuDNNLSTM
 from keras.layers.wrappers import Bidirectional
 
 
@@ -63,10 +63,10 @@ def esim_bilstm_model(vectors, shape, settings, embedding_type):
 
     y = layers.Concatenate(name="Last_big_concat")([av1, mx1, av2, mx2])
     y = layers.Dense(1024)(y)
-    y = layers.LeakyReLU(alpha=0.3)(y)
+    y = layers.ReLU()(y)
     y = layers.Dropout(0.2)(y)
-    y = layers.Dense(1024)(y)
-    y = layers.LeakyReLU(alpha=0.3)(y)
+    y = layers.Dense(512)(y)
+    y = layers.ReLU()(y)
     y = layers.Dropout(0.2)(y)
     y = layers.Dense(3, activation='softmax')(y)
 
