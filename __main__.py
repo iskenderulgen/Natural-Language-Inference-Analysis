@@ -28,7 +28,8 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
                                                                                                   train_loc=train_loc,
                                                                                                   dev_loc=dev_loc,
                                                                                                   transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings, embedding_type=embedding_type)
+        model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings,
+                                  embedding_type=embedding_type)
 
     elif transformer_type == 'bert_sentence':
         train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
@@ -47,7 +48,7 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
         validation_data=(dev_x, dev_labels),
         epochs=settings["nr_epoch"],
         batch_size=settings["batch_size"],
-        verbose=1,
+        verbose=2,
         callbacks=[es]
     )
 
@@ -102,7 +103,7 @@ def demo(shape, visualization, transformer_type):
     premise = "all i have to say on this issue is that there is actual evidence to support evolution!!"
     hypothesis = "I have to contradict phro and say that the peppered moths do show evidence of evolution. The data may have been insufficient, but evolution did occur. When different alleles are expressed due to external factors, this is evolution."
 
-    if transformer_type == 'glove':#  or 'fasttext' or 'word2vec':
+    if transformer_type == 'glove' or 'fasttext' or 'word2vec':
         nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
         nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
                                           max_length=shape[0]))
@@ -148,12 +149,12 @@ def main(
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
         test_loc=path + "SNLI/snli_test.jsonl",
-        max_length=64,  # 50 for word based #1024 for bert_dependencies sentence
+        max_length=64,  # 64 for word based #1024 for bert_dependencies sentence
         nr_hidden=300,
         dropout=0.2,
         learn_rate=0.0004,
         batch_size=32,
-        nr_epoch=10,
+        nr_epoch=20,
         attention_visualization=True):
     shape = (max_length, nr_hidden, 3)
     settings = {

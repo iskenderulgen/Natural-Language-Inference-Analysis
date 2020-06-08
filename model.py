@@ -15,7 +15,7 @@ def esim_bilstm_model(vectors, shape, settings, embedding_type):
         input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
         input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
 
-        embed = word_embedding_layer(vectors, max_length, nr_hidden)
+        embed = word_embedding_layer(vectors, max_length)
 
         x1 = embed(input1)
         x2 = embed(input2)
@@ -24,7 +24,7 @@ def esim_bilstm_model(vectors, shape, settings, embedding_type):
         input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
         input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
 
-        embed = sentence_embedding_layer(projected_dim=nr_hidden)
+        embed = sentence_embedding_layer()
 
         x1 = embed(input1)
         x2 = embed(input2)
@@ -89,7 +89,7 @@ def decomp_attention_model(vectors, shape, settings, embedding_type):
         input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
         input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
 
-        embed = word_embedding_layer(vectors, max_length, nr_hidden)
+        embed = word_embedding_layer(vectors, max_length)
 
         x1 = embed(input1)
         x2 = embed(input2)
@@ -99,7 +99,7 @@ def decomp_attention_model(vectors, shape, settings, embedding_type):
         input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
         input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
 
-        bert = sentence_embedding_layer(projected_dim=nr_hidden)
+        bert = sentence_embedding_layer()
 
         x1 = bert(input1)
         x2 = bert(input2)
@@ -144,21 +144,17 @@ def decomp_attention_model(vectors, shape, settings, embedding_type):
     return model
 
 
-def sentence_embedding_layer(projected_dim):
+def sentence_embedding_layer():
     return models.Sequential(
         [
             layers.Reshape(
                 (1, 1024), input_shape=(1024,)
             ),
-            layers.TimeDistributed(
-                layers.Dense(projected_dim, activation=None, use_bias=False),
-                input_shape=(1024,)
-            ),
         ]
     )
 
 
-def word_embedding_layer(vectors, max_length, projected_dim):
+def word_embedding_layer(vectors, max_length):
     return models.Sequential(
         [
             layers.Embedding(
@@ -167,10 +163,7 @@ def word_embedding_layer(vectors, max_length, projected_dim):
                 input_length=max_length,
                 weights=[vectors],
                 trainable=False,
-            ),
-            layers.TimeDistributed(
-                layers.Dense(projected_dim, activation=None, use_bias=False)
-            ),
+            )
         ]
     )
 
@@ -200,3 +193,21 @@ def sum_word(x):
 
 
 __all__ = [decomp_attention_model]
+
+"""
+def word_embedding_layer(vectors, max_length, projected_dim):
+    return models.Sequential(
+        [
+            layers.Embedding(
+                vectors.shape[0],
+                vectors.shape[1],
+                input_length=max_length,
+                weights=[vectors],
+                trainable=False,
+            ),
+            layers.TimeDistributed(
+                layers.Dense(projected_dim, activation=None, use_bias=False)
+            ),
+        ]
+    )
+"""
