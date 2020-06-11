@@ -111,7 +111,7 @@ class BertWordPredict(object):
         return features, sentence_tokens
 
     @staticmethod
-    def predict(premise, hypothesis, path, transformer_type):
+    def predict(premise, hypothesis, path, transformer_type, eval_type, label):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
         model = load_model(path + 'similarity/' + transformer_type + "_" + "model.h5"
@@ -127,15 +127,39 @@ class BertWordPredict(object):
         tokenizer = tokenization.FullTokenizer(
             vocab_file=path + "transformers/bert/vocab.txt", do_lower_case=True)
 
-        sentences = [premise, hypothesis]
-        examples = BertWordPredict.read_examples(sentences)
-        sentences_features, sentence_tokens = BertWordPredict.convert_examples_to_features(examples=examples,
-                                                                                           seq_length=64,
-                                                                                           tokenizer=tokenizer)
+        if eval_type == 'demo':
+            sentences = [premise, hypothesis]
+            examples = BertWordPredict.read_examples(sentences)
+            sentences_features, sentence_tokens = BertWordPredict.convert_examples_to_features(examples=examples,
+                                                                                               seq_length=64,
+                                                                                               tokenizer=tokenizer)
+            premise_vectors = np.asarray(sentences_features[0]).reshape((1, 64))
+            hypothesis_vectors = np.asarray(sentences_features[1]).reshape((1, 64))
+            outputs = model.predict([premise_vectors, hypothesis_vectors])
 
-        premise_vectors = np.asarray(sentences_features[0]).reshape((1, 64))
-        hypothesis_vectors = np.asarray(sentences_features[1]).reshape((1, 64))
-        outputs = model.predict([premise_vectors, hypothesis_vectors])
+            scores = outputs[0]
+            return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
 
-        scores = outputs[0]
-        return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
+        elif eval_type == 'evaluate':
+            total = 0.0
+            true_p = 0.0
+
+            premise = BertWordPredict.read_examples(premise)
+            hypothesis = BertWordPredict.read_examples(hypothesis)
+            premise_features, _ = BertWordPredict.convert_examples_to_features(examples=premise,
+                                                                               seq_length=64,
+                                                                               tokenizer=tokenizer)
+            hypothesis_features, _ = BertWordPredict.convert_examples_to_features(examples=hypothesis,
+                                                                                  seq_length=64,
+                                                                                  tokenizer=tokenizer)
+
+            for i in range(len(premise_features)):
+                print(i)
+                premise_vectors = np.asarray(premise_features[i]).reshape((1, 64))
+                hypothesis_vectors = np.asarray(hypothesis_features[i]).reshape((1, 64))
+                outputs = model.predict([premise_vectors, hypothesis_vectors])
+                scores = outputs[0]
+                if entailment_types[scores.argmax()] == BertWordPredict.entailment_types[label[i].argmax()]:
+                    true_p += 1
+                total += 1
+            print("Entailment Model Accuracy is", true_p / total)

@@ -79,31 +79,40 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
 
 
 def evaluate(dev_loc, shape, transformer_type):
-    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
-    disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
-    print("evaluation dataset loaded")
-    nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
-    nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
-                                      max_length=shape[0]))
-    total = 0.0
-    true_p = 0.0
-    for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
-        doc1 = nlp(text1, disable=disabled_pipelines)
-        doc2 = nlp(text2, disable=disabled_pipelines)
-        y_prediction, _, _, _ = doc1.similarity(doc2)
-        if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
-            true_p += 1
-        total += 1
-    print("Entailment Model Accuracy is", true_p / total)
+    if transformer_type == 'glove':  # or 'fasttext' or 'word2vec':
+        dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+        disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
+        print("evaluation dataset loaded")
+        nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
+        nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
+                                          max_length=shape[0]))
+        total = 0.0
+        true_p = 0.0
+        for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
+            print(label)
+            doc1 = nlp(text1, disable=disabled_pipelines)
+            doc2 = nlp(text2, disable=disabled_pipelines)
+            y_prediction, _, _, _ = doc1.similarity(doc2)
+            if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
+                true_p += 1
+            total += 1
+        print("Entailment Model Accuracy is", true_p / total)
 
-    return true_p, total
+    elif transformer_type == 'bert_initial_word':
+
+        dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+        BertWordPredict.predict(
+            premise=dev_texts1, hypothesis=dev_texts2, path=path, transformer_type=transformer_type,
+            eval_type='evaluate', label=dev_labels)
 
 
 def demo(shape, visualization, transformer_type):
     premise = "all i have to say on this issue is that there is actual evidence to support evolution!!"
-    hypothesis = "I have to contradict phro and say that the peppered moths do show evidence of evolution. The data may have been insufficient, but evolution did occur. When different alleles are expressed due to external factors, this is evolution."
+    hypothesis = "I have to contradict phro and say that the peppered moths do show evidence of evolution. " \
+                 "The data may have been insufficient, but evolution did occur. When different alleles are " \
+                 "expressed due to external factors, this is evolution."
 
-    if transformer_type == 'glove' or 'fasttext' or 'word2vec':
+    if transformer_type == 'glove':  # or 'fasttext' or 'word2vec':
         nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
         nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
                                           max_length=shape[0]))
@@ -134,7 +143,8 @@ def demo(shape, visualization, transformer_type):
     elif transformer_type == 'bert_initial_word':
 
         entailment_type, confidence, attention1, attention2, sent_tokens = BertWordPredict.predict(
-            premise=premise, hypothesis=hypothesis, path=path, transformer_type=transformer_type)
+            premise=premise, hypothesis=hypothesis, path=path, transformer_type=transformer_type, eval_type='demo',
+            label=None)
         print("Entailment type:", entailment_type, "(Confidence:", confidence, ")")
 
         if visualization:
@@ -143,7 +153,7 @@ def demo(shape, visualization, transformer_type):
 
 
 def main(
-        mode="train",
+        mode="evaluate",
         embedding_type="word",
         transformer_type="bert_initial_word",
         train_loc=path + "SNLI/snli_train.jsonl",
