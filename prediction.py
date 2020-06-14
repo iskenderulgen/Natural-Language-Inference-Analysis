@@ -111,7 +111,7 @@ class BertWordPredict(object):
         return features, sentence_tokens
 
     @staticmethod
-    def predict(premise, hypothesis, path, transformer_type, eval_type, label):
+    def predict(premises, hypothesis, path, transformer_type, eval_type, label):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
         model = load_model(path + 'similarity/' + transformer_type + "_" + "model.h5"
@@ -128,7 +128,7 @@ class BertWordPredict(object):
             vocab_file=path + "transformers/bert/vocab.txt", do_lower_case=True)
 
         if eval_type == 'demo':
-            sentences = [premise, hypothesis]
+            sentences = [premises, hypothesis]
             examples = BertWordPredict.read_examples(sentences)
             sentences_features, sentence_tokens = BertWordPredict.convert_examples_to_features(examples=examples,
                                                                                                seq_length=64,
@@ -140,13 +140,42 @@ class BertWordPredict(object):
             scores = outputs[0]
             return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
 
+        elif eval_type == 'demo_listlike':
+            premises = BertWordPredict.read_examples(premises)
+            hypothesis = BertWordPredict.read_examples(hypothesis)
+            premise_features, _ = BertWordPredict.convert_examples_to_features(examples=premises,
+                                                                               seq_length=64,
+                                                                               tokenizer=tokenizer)
+            hypothesis_features, _ = BertWordPredict.convert_examples_to_features(examples=hypothesis,
+                                                                                  seq_length=64,
+                                                                                  tokenizer=tokenizer)
+            total = 0.0
+            contradict = 0.0
+            entailment = 0.0
+            neutral = 0.0
+            for text1, text2 in zip(premise_features, hypothesis_features):
+                premise_vectors = np.asarray(text1).reshape((1, 64))
+                hypothesis_vectors = np.asarray(text2).reshape((1, 64))
+                outputs = model.predict([premise_vectors, hypothesis_vectors])
+                if entailment_types[outputs[0].argmax()] is 'contradiction':
+                    contradict += 1
+                elif entailment_types[outputs[0].argmax()] is 'entailment':
+                    entailment += 1
+                elif entailment_types[outputs[0].argmax()] is 'neutral':
+                    neutral += 1
+                total += 1
+
+            print("total contradiction = ", contradict / total)
+            print("total entailment =", entailment / total)
+            print("total neutral =", neutral / total)
+
         elif eval_type == 'evaluate':
             total = 0.0
             true_p = 0.0
 
-            premise = BertWordPredict.read_examples(premise)
+            premises = BertWordPredict.read_examples(premises)
             hypothesis = BertWordPredict.read_examples(hypothesis)
-            premise_features, _ = BertWordPredict.convert_examples_to_features(examples=premise,
+            premise_features, _ = BertWordPredict.convert_examples_to_features(examples=premises,
                                                                                seq_length=64,
                                                                                tokenizer=tokenizer)
             hypothesis_features, _ = BertWordPredict.convert_examples_to_features(examples=hypothesis,
@@ -154,11 +183,14 @@ class BertWordPredict(object):
                                                                                   tokenizer=tokenizer)
 
             for i in range(len(premise_features)):
-                print(i)
                 premise_vectors = np.asarray(premise_features[i]).reshape((1, 64))
                 hypothesis_vectors = np.asarray(hypothesis_features[i]).reshape((1, 64))
                 outputs = model.predict([premise_vectors, hypothesis_vectors])
                 scores = outputs[0]
+                # if entailment_types[scores.argmax()] == 'contradiction':
+                #     y_pred = 'neutral'
+                # else:
+                #     y_pred = entailment_types[scores.argmax()]
                 if entailment_types[scores.argmax()] == BertWordPredict.entailment_types[label[i].argmax()]:
                     true_p += 1
                 total += 1
