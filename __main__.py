@@ -13,7 +13,8 @@ from pretrained_based.word_vectors import spacy_word_transformer
 from utils.utils import read_snli, load_spacy_nlp, attention_visualization, xml_test
 
 path = "/media/ulgen/Samsung/contradiction_data/"
-xml_path = "/home/ulgen/Downloads/a/data/UKPConvArg1Strict-XML/tv-is-better-than-books_tv.xml"
+xml_path1 = "/home/ulgen/Downloads/a/data/UKPConvArg1Strict-XML/christianity-or-atheism-_atheism.xml"
+xml_path2 = "/home/ulgen/Downloads/a/data/UKPConvArg1Strict-XML/christianity-or-atheism-_atheism.xml"
 
 
 def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type):
@@ -80,7 +81,8 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
 
 
 def evaluate(dev_loc, shape, transformer_type):
-    if transformer_type == 'glove':  # or 'fasttext' or 'word2vec':
+    types = ['glove', 'fasttext', 'word2vec']
+    if transformer_type in types:
         dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
         disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
         print("evaluation dataset loaded")
@@ -93,6 +95,10 @@ def evaluate(dev_loc, shape, transformer_type):
             doc1 = nlp(text1, disable=disabled_pipelines)
             doc2 = nlp(text2, disable=disabled_pipelines)
             y_prediction, _, _, _ = doc1.similarity(doc2)
+            ################
+            # if y_prediction == 'contradiction':
+            #    y_prediction = 'neutral'
+            ################
             if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
                 true_p += 1
             total += 1
@@ -107,8 +113,15 @@ def evaluate(dev_loc, shape, transformer_type):
 
 
 def demo_listlike(loc, shape, transformer_type):
-    if transformer_type == 'glove':  # or 'fasttext' or 'word2vec':
-        premises, hypothesis = xml_test(path=loc)
+    premises, _ = xml_test(path=xml_path1)
+    _, hypothesis = xml_test(path=xml_path2)
+
+    a = min(len(premises), len(hypothesis))
+    premises = premises[:a]
+    hypothesis = hypothesis[:a]
+
+    types = ['glove', 'fasttext', 'word2vec']
+    if transformer_type in types:
         disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
         print("bling test dataset loaded")
         nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
@@ -122,7 +135,7 @@ def demo_listlike(loc, shape, transformer_type):
             doc1 = nlp(text1, disable=disabled_pipelines)
             doc2 = nlp(text2, disable=disabled_pipelines)
             y_prediction, _, _, _ = doc1.similarity(doc2)
-            print(y_prediction)
+            # print(y_prediction)
             if y_prediction is 'contradiction':
                 contradict += 1
             elif y_prediction is 'entailment':
@@ -135,7 +148,6 @@ def demo_listlike(loc, shape, transformer_type):
         print("total neutral =", neutral / total)
 
     elif transformer_type == 'bert_initial_word':
-        premises, hypothesis = xml_test(path=loc)
         BertWordPredict.predict(
             premises=premises, hypothesis=hypothesis, path=path, transformer_type=transformer_type,
             eval_type='demo_listlike', label=None)
@@ -147,7 +159,8 @@ def demo(shape, visualization, transformer_type):
                  "The data may have been insufficient, but evolution did occur. When different alleles are " \
                  "expressed due to external factors, this is evolution."
 
-    if transformer_type == 'glove':  # or 'fasttext' or 'word2vec':
+    types = ['glove', 'fasttext', 'word2vec']
+    if transformer_type in types:
         nlp = load_spacy_nlp(path=path, transformer_type=transformer_type)
         nlp.add_pipe(SpacyPrediction.load(path=path + 'similarity/' + transformer_type + "_" + "model.h5",
                                           max_length=shape[0]))
@@ -187,13 +200,16 @@ def demo(shape, visualization, transformer_type):
                                     attention2=attention2, path=path, transformer_type=transformer_type)
 
 
+"bert_initial_word"
+
+
 def main(
         mode="demo_listlike",
         embedding_type="word",
         transformer_type="bert_initial_word",
         train_loc=path + "SNLI/snli_train.jsonl",
         dev_loc=path + "SNLI/snli_dev.jsonl",
-        test_loc=path + "SNLI/snli_test.jsonl",
+        test_loc=path + "SNLI/snli_test_org.jsonl",
         max_length=64,  # 64 for word based #1024 for bert_dependencies sentence
         nr_hidden=300,
         dropout=0.2,
@@ -221,7 +237,7 @@ def main(
             sys.exit(1)
         evaluate(test_loc, shape, transformer_type=transformer_type)
     elif mode == "demo_listlike":
-        demo_listlike(loc=xml_path, shape=shape, transformer_type=transformer_type)
+        demo_listlike(loc=xml_path1, shape=shape, transformer_type=transformer_type)
     else:
         demo(shape, transformer_type=transformer_type, visualization=attention_visualization)
 

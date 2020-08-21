@@ -171,3 +171,19 @@ print()
         print("Entailment Model Accuracy is", true_p / total)
 
 """
+
+
+"""  """
+# df = pandas.read_csv("/home/ulgen/Downloads/sample_data.csv", index_col=False)
+# sentence1 = list(df['sentence1'])
+# sentence2 = list(df['sentence2'])
+# gold_label = list(df['gold_label'])
+#
+# data = {}
+# with codecs.getwriter("utf-8")(tf.gfile.Open("/home/ulgen/Downloads/sample_data.jsonl", "w")) as writer:
+#     for text1, text2, label in zip(sentence1, sentence2, gold_label):
+#         data["sentence1"] = text1
+#         data["sentence2"] = text2
+#         data["gold_label"] = label
+#         writer.write(json.dumps(data) + "\n")
+

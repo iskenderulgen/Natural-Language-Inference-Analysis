@@ -1,3 +1,6 @@
+import codecs
+import json
+import pandas as pd
 import numpy as np
 from keras import Model
 from keras.models import load_model
@@ -141,6 +144,17 @@ class BertWordPredict(object):
             return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
 
         elif eval_type == 'demo_listlike':
+            single_entailment_type = []
+            single_score = []
+            entailment_ratio = []
+            contradiction_ratio = []
+            total_array = []
+            entailment_count = []
+            contradiction_count = []
+            entailment_score = []
+            contradiction_score = []
+            neutral_score = []
+
             premises = BertWordPredict.read_examples(premises)
             hypothesis = BertWordPredict.read_examples(hypothesis)
             premise_features, _ = BertWordPredict.convert_examples_to_features(examples=premises,
@@ -150,24 +164,52 @@ class BertWordPredict(object):
                                                                                   seq_length=64,
                                                                                   tokenizer=tokenizer)
             total = 0.0
-            contradict = 0.0
             entailment = 0.0
-            neutral = 0.0
+            contradiction = 0.0
             for text1, text2 in zip(premise_features, hypothesis_features):
                 premise_vectors = np.asarray(text1).reshape((1, 64))
                 hypothesis_vectors = np.asarray(text2).reshape((1, 64))
                 outputs = model.predict([premise_vectors, hypothesis_vectors])
-                if entailment_types[outputs[0].argmax()] is 'contradiction':
-                    contradict += 1
-                elif entailment_types[outputs[0].argmax()] is 'entailment':
-                    entailment += 1
-                elif entailment_types[outputs[0].argmax()] is 'neutral':
-                    neutral += 1
-                total += 1
 
-            print("total contradiction = ", contradict / total)
-            print("total entailment =", entailment / total)
-            print("total neutral =", neutral / total)
+                entail_score = outputs[0][0][0]
+                contra_score = outputs[0][0][1]
+                neut_score = outputs[0][0][2]
+
+                if contra_score < entail_score + neut_score:
+                    single_score.append(entail_score + neut_score)
+                    single_entailment_type.append("entailment")
+                    entailment += 1
+
+                else:
+                    single_score.append(contra_score)
+                    single_entailment_type.append("contradiction")
+                    contradiction += 1
+
+                total += 1
+                entailment_ratio.append(entailment / total)
+                entailment_count.append(entailment)
+                entailment_score.append(entail_score)
+                contradiction_ratio.append(contradiction / total)
+                contradiction_count.append(contradiction)
+                contradiction_score.append(contra_score)
+                neutral_score.append(neut_score)
+
+                total_array.append(total)
+
+            df1 = pd.DataFrame(
+                data={'premises': premises, 'hypothesis:': hypothesis,
+                      'entailment score': entailment_score, 'contradiction score': contradiction_score,
+                      'neutral score': neutral_score, 'cum_prediction_score': single_score,
+                      'type': single_entailment_type,
+                      'entailment_ratio': entailment_ratio,
+                      'entailment_count': entailment_count, 'contradiction_ratio': contradiction_ratio,
+                      'contradiction_count': contradiction_count, 'total': total_array})
+            html = df1.to_html()
+
+            # write html to file
+            text_file = open("/media/ulgen/Samsung/contradiction_data/attention_maps/index.html", "w")
+            text_file.write(html)
+            text_file.close()
 
         elif eval_type == 'evaluate':
             total = 0.0
@@ -187,11 +229,58 @@ class BertWordPredict(object):
                 hypothesis_vectors = np.asarray(hypothesis_features[i]).reshape((1, 64))
                 outputs = model.predict([premise_vectors, hypothesis_vectors])
                 scores = outputs[0]
+                ################
                 # if entailment_types[scores.argmax()] == 'contradiction':
                 #     y_pred = 'neutral'
                 # else:
                 #     y_pred = entailment_types[scores.argmax()]
+                # if y_pred == BertWordPredict.entailment_types[label[i].argmax()]:
+                ################
                 if entailment_types[scores.argmax()] == BertWordPredict.entailment_types[label[i].argmax()]:
                     true_p += 1
                 total += 1
             print("Entailment Model Accuracy is", true_p / total)
+
+
+"""
+            total = 0.0
+            contradict = 0.0
+            entailment = 0.0
+            neutral = 0.0
+            for text1, text2 in zip(premise_features, hypothesis_features):
+                premise_vectors = np.asarray(text1).reshape((1, 64))
+                hypothesis_vectors = np.asarray(text2).reshape((1, 64))
+                outputs = model.predict([premise_vectors, hypothesis_vectors])
+                single_entailment_type.append(entailment_types[outputs[0].argmax()])
+                print(outputs[0][0][0])
+                single_score.append(outputs[0].max())
+                print(outputs[0].max())
+                print(entailment_types[outputs[0].argmax()])
+                if entailment_types[outputs[0].argmax()] is 'contradiction':
+                    contradict += 1
+                elif entailment_types[outputs[0].argmax()] is 'entailment':
+                    entailment += 1
+                elif entailment_types[outputs[0].argmax()] is 'neutral':
+                    neutral += 1
+                total += 1
+
+            data = {}
+            data1 = {}
+            with codecs.getwriter("utf-8")(tf.gfile.Open("/home/ulgen/Downloads/sample_data.jsonl", "w")) as writer:
+                for text1, text2, ent_type, ent_score in zip(premises, hypothesis, single_entailment_type,
+                                                             single_score):
+                    data["premise"] = text1
+                    data["claim"] = text2
+                    data["entailment_type"] = ent_type
+                    data["entailment_sore"] = str(ent_score)
+                    writer.write(json.dumps(data) + "\n")
+
+                data1["total_contradiction"] = str(contradict / total)
+                data1["total_entailment"] = str(entailment / total)
+                data1["total_neutral"] = str(neutral / total)
+                writer.write(json.dumps(data1) + "\n")
+
+            print("total contradiction = ", contradict / total)
+            print("total entailment =", entailment / total)
+            print("total neutral =", neutral / total)
+"""

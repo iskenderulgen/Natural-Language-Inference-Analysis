@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
 
-# LABELS = {"entails": 0, "contradiction": 2, "neutral": 2}
+#LABELS = {"entails": 0, "contradiction": 2, "neutral": 2}
 
 def set_keras_backend(backend):
     if K.backend() != backend:
@@ -114,4 +114,6 @@ def xml_test(path):
         type = item.find('text').text
         arg2_text.append(type.replace("\n"," "))
 
+    print(len(arg1_text))
+    print("a")
     return arg1_text, arg2_text
