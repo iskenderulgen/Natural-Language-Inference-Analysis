@@ -13,8 +13,8 @@ from pretrained_based.word_vectors import spacy_word_transformer
 from utils.utils import read_snli, load_spacy_nlp, attention_visualization, xml_test
 
 path = "/media/ulgen/Samsung/contradiction_data/"
-xml_path1 = "/home/ulgen/Downloads/a/data/UKPConvArg1Strict-XML/christianity-or-atheism-_atheism.xml"
-xml_path2 = "/home/ulgen/Downloads/a/data/UKPConvArg1Strict-XML/christianity-or-atheism-_atheism.xml"
+xml_path1 = path + "attention_maps/a/data/UKPConvArg1Strict-XML/christianity-or-atheism-_christianity.xml"
+xml_path2 = path + "attention_maps/a/data/UKPConvArg1Strict-XML/christianity-or-atheism-_atheism.xml"
 
 
 def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type):
@@ -31,7 +31,7 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
                                                                                                   dev_loc=dev_loc,
                                                                                                   transformer_type=transformer_type)
         model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings,
-                                  embedding_type=embedding_type)
+                                       embedding_type=embedding_type)
 
     elif transformer_type == 'bert_sentence':
         train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
@@ -43,7 +43,8 @@ def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type)
 
     model.summary()
 
-    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=5, restore_best_weights=True)
+    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=4, restore_best_weights=True)
+
     history = model.fit(
         train_x,
         train_labels,
@@ -112,7 +113,7 @@ def evaluate(dev_loc, shape, transformer_type):
             eval_type='evaluate', label=dev_labels)
 
 
-def demo_listlike(loc, shape, transformer_type):
+def demo_listlike(shape, transformer_type):
     premises, _ = xml_test(path=xml_path1)
     _, hypothesis = xml_test(path=xml_path2)
 
@@ -204,12 +205,12 @@ def demo(shape, visualization, transformer_type):
 
 
 def main(
-        mode="demo_listlike",
+        mode="evaluate",
         embedding_type="word",
         transformer_type="bert_initial_word",
-        train_loc=path + "SNLI/snli_train.jsonl",
-        dev_loc=path + "SNLI/snli_dev.jsonl",
-        test_loc=path + "SNLI/snli_test_org.jsonl",
+        train_loc=path + "SNLI_MNLI/snli/total_train.jsonl",
+        dev_loc=path + "SNLI_MNLI/snli/total_dev.jsonl",
+        test_loc=path + "SNLI_MNLI/snli/snli_test.jsonl",
         max_length=64,  # 64 for word based #1024 for bert_dependencies sentence
         nr_hidden=300,
         dropout=0.2,
@@ -237,7 +238,7 @@ def main(
             sys.exit(1)
         evaluate(test_loc, shape, transformer_type=transformer_type)
     elif mode == "demo_listlike":
-        demo_listlike(loc=xml_path1, shape=shape, transformer_type=transformer_type)
+        demo_listlike(shape=shape, transformer_type=transformer_type)
     else:
         demo(shape, transformer_type=transformer_type, visualization=attention_visualization)
 

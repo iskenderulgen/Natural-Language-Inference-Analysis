@@ -187,3 +187,38 @@ print()
 #         data["gold_label"] = label
 #         writer.write(json.dumps(data) + "\n")
 
+
+
+
+
+path_main = "/media/ulgen/Samsung/contradiction_data/SNLI_MNLI/"
+
+total = []
+
+
+def read_snli(path):
+    with open(path, "r") as file_:
+        # with open(path_main + "total_test.jsonl", "w") as outfile:
+        for line in file_:
+            data = {}
+            eg = json.loads(line)
+            data["sentence1"] = (eg["sentence1"])
+            data["sentence2"] = (eg["sentence2"])
+            data["gold_label"] = (eg["gold_label"])
+            total.append(data)
+            # outfile.write(json.dumps(data) + "\n")
+
+
+read_snli(path=path_main + "snli/snli_dev.jsonl")
+read_snli(path=path_main + "mnli/mnli_dev.jsonl")
+
+with open(path_main + "total_dev.jsonl", "w") as outfile:
+    for line in total:
+        outfile.write(json.dumps(line) + "\n")
+
+# path = "/media/ulgen/Samsung/contradiction_data/SNLI_MNLI/total_test.jsonl"
+#
+# with open(path, "r") as file_:
+#          for line in file_:
+#              eg = json.loads(line)
+#              print(eg)
