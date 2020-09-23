@@ -117,7 +117,7 @@ class BertWordPredict(object):
     def predict(premises, hypothesis, path, transformer_type, eval_type, label):
         entailment_types = ["entailment", "contradiction", "neutral"]
 
-        model = load_model(path + 'similarity/' + transformer_type + "_" + "model.h5"
+        model = load_model(path + 'similarity/esim/' + transformer_type + "model.h5"
                            , custom_objects={"tf": tf})
         print("loading model")
         model.summary()
@@ -144,13 +144,22 @@ class BertWordPredict(object):
             return entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2], sentence_tokens
 
         elif eval_type == 'demo_listlike':
-            single_entailment_type = []
-            single_score = []
+            two_class_entailment_type = []
+            two_class_entailment_ratio = []
+            two_class_contradiction_ratio = []
+            two_class_entailment_count = []
+            two_class_contradiction_count = []
+
+            three_class_entailment_type = []
             entailment_ratio = []
             contradiction_ratio = []
+            neutral_ratio = []
+
             total_array = []
             entailment_count = []
             contradiction_count = []
+            neutral_count = []
+
             entailment_score = []
             contradiction_score = []
             neutral_score = []
@@ -164,8 +173,11 @@ class BertWordPredict(object):
                                                                                   seq_length=64,
                                                                                   tokenizer=tokenizer)
             total = 0.0
+            two_class_entailment = 0.0
+            two_class_contradiction = 0.0
             entailment = 0.0
             contradiction = 0.0
+            neutral = 0.0
             for text1, text2 in zip(premise_features, hypothesis_features):
                 premise_vectors = np.asarray(text1).reshape((1, 64))
                 hypothesis_vectors = np.asarray(text2).reshape((1, 64))
@@ -174,24 +186,40 @@ class BertWordPredict(object):
                 entail_score = outputs[0][0][0]
                 contra_score = outputs[0][0][1]
                 neut_score = outputs[0][0][2]
+                entailmennt_type = entailment_types[outputs[0].argmax()]
+                three_class_entailment_type.append(entailmennt_type)
+
+                if entailmennt_type == "entailment":
+                    entailment += 1
+                elif entailmennt_type == "contradiction":
+                    contradiction += 1
+                else:
+                    neutral += 1
 
                 if contra_score < entail_score + neut_score:
-                    single_score.append(entail_score + neut_score)
-                    single_entailment_type.append("entailment")
-                    entailment += 1
+                    two_class_entailment_type.append("entailment")
+                    two_class_entailment += 1
 
                 else:
-                    single_score.append(contra_score)
-                    single_entailment_type.append("contradiction")
-                    contradiction += 1
+                    two_class_entailment_type.append("contradiction")
+                    two_class_contradiction += 1
 
                 total += 1
+                two_class_entailment_ratio.append(two_class_entailment / total)
+                two_class_contradiction_ratio.append(two_class_contradiction / total)
+                two_class_entailment_count.append(two_class_entailment)
+                two_class_contradiction_count.append(two_class_contradiction)
+
                 entailment_ratio.append(entailment / total)
                 entailment_count.append(entailment)
                 entailment_score.append(entail_score)
+
                 contradiction_ratio.append(contradiction / total)
                 contradiction_count.append(contradiction)
                 contradiction_score.append(contra_score)
+
+                neutral_ratio.append(neutral / total)
+                neutral_count.append(neutral)
                 neutral_score.append(neut_score)
 
                 total_array.append(total)
@@ -199,11 +227,18 @@ class BertWordPredict(object):
             df1 = pd.DataFrame(
                 data={'premises': premises, 'hypothesis:': hypothesis,
                       'entailment score': entailment_score, 'contradiction score': contradiction_score,
-                      'neutral score': neutral_score, 'cum_prediction_score': single_score,
-                      'type': single_entailment_type,
+                      'neutral score': neutral_score,
+                      'two_class_type': two_class_entailment_type,
+                      'two_class_entailment_count': two_class_entailment_count,
+                      'two_class_contradiction_count': two_class_contradiction_count,
+                      'three_class_type': three_class_entailment_type,
                       'entailment_ratio': entailment_ratio,
-                      'entailment_count': entailment_count, 'contradiction_ratio': contradiction_ratio,
-                      'contradiction_count': contradiction_count, 'total': total_array})
+                      'entailment_count': entailment_count,
+                      'contradiction_ratio': contradiction_ratio,
+                      'contradiction_count': contradiction_count,
+                      'neutral_ratio':neutral_ratio,
+                      'neutral_count': neutral_count,
+                      'total': total_array})
             html = df1.to_html()
 
             # write html to file

@@ -46,7 +46,7 @@ def read_snli(path):
     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
 
-def load_spacy_nlp(path, transformer_type):
+def load_spacy_nlp(transformer_path, transformer_type):
     nlp = None
 
     if transformer_type == 'glove':
@@ -61,14 +61,14 @@ def load_spacy_nlp(path, transformer_type):
         spacy.prefer_gpu()
         gpu = spacy.require_gpu()
         print("GPU:", gpu)
-        nlp = spacy.load(path + "transformers/" + transformer_type)
+        nlp = spacy.load(transformer_path + transformer_type)
 
     elif transformer_type == 'word2vec':
         print("Loading word2vec Vectors")
         spacy.prefer_gpu()
         gpu = spacy.require_gpu()
         print("GPU:", gpu)
-        nlp = spacy.load(path + "transformers/" + transformer_type)
+        nlp = spacy.load(transformer_path + transformer_type)
 
     return nlp
 

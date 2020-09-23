@@ -147,7 +147,7 @@ with open("/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert_sentence/
 print(np.asarray(train_x).shape)
 print()
 
-#print(np.asarray(train_x).shape)
+# print(np.asarray(train_x).shape)
 # new = np.asarray(train_x).squeeze(axis=2)
 # final = [np.array(new[: 549367]), np.array(new[549367:])]
 #
@@ -172,7 +172,6 @@ print()
 
 """
 
-
 """  """
 # df = pandas.read_csv("/home/ulgen/Downloads/sample_data.csv", index_col=False)
 # sentence1 = list(df['sentence1'])
@@ -188,37 +187,3 @@ print()
 #         writer.write(json.dumps(data) + "\n")
 
 
-
-
-
-path_main = "/media/ulgen/Samsung/contradiction_data/SNLI_MNLI/"
-
-total = []
-
-
-def read_snli(path):
-    with open(path, "r") as file_:
-        # with open(path_main + "total_test.jsonl", "w") as outfile:
-        for line in file_:
-            data = {}
-            eg = json.loads(line)
-            data["sentence1"] = (eg["sentence1"])
-            data["sentence2"] = (eg["sentence2"])
-            data["gold_label"] = (eg["gold_label"])
-            total.append(data)
-            # outfile.write(json.dumps(data) + "\n")
-
-
-read_snli(path=path_main + "snli/snli_dev.jsonl")
-read_snli(path=path_main + "mnli/mnli_dev.jsonl")
-
-with open(path_main + "total_dev.jsonl", "w") as outfile:
-    for line in total:
-        outfile.write(json.dumps(line) + "\n")
-
-# path = "/media/ulgen/Samsung/contradiction_data/SNLI_MNLI/total_test.jsonl"
-#
-# with open(path, "r") as file_:
-#          for line in file_:
-#              eg = json.loads(line)
-#              print(eg)

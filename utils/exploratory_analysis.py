@@ -1,5 +1,5 @@
 import argparse
-from prediction_based import bert_encoder
+from train import bert_contextualized_sentence_encoder
 import matplotlib.pyplot as plt
 import pandas as pd
 from pyspark import SparkConf, SparkContext
@@ -51,8 +51,8 @@ def get_vectors_and_sims(sentence_pairs, label_def):
     premises = sentence_pairs['sentence1'].to_numpy()
     hypothesis = sentence_pairs['sentence2'].to_numpy()
 
-    sentence_vectors = bert_encoder.sentence_transformer(bert_directory=args.bert_directory, premises=premises,
-                                                         hypothesis=hypothesis, feature_type="bert_sentence")
+    sentence_vectors = bert_contextualized_sentence_encoder.sentence_transformer(bert_directory=args.bert_directory, premises=premises,
+                                                                                 hypothesis=hypothesis, feature_type="bert_sentence")
 
     premises_vectors = sentence_vectors[0]
     hypothesis_vectors = sentence_vectors[1]

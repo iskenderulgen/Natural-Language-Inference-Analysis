@@ -1,20 +1,31 @@
 from keras import backend as K
-from keras import layers, Model, models, optimizers, regularizers
-from keras.layers import CuDNNLSTM
-from keras.layers.wrappers import Bidirectional
+from keras import layers, Model, models, optimizers
 
 
-def decomp_attention_model(vectors, shape, settings, embedding_type):
-    max_length, nr_hidden, nr_class = shape
+def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learning_rate, embedding_type):
     input1, input2, x1, x2 = None, None, None, None
 
-    input1 = layers.Input(shape=(1,), dtype="string", name="sent1")
-    input2 = layers.Input(shape=(1,), dtype="string", name="sent2")
+    if embedding_type == "word":
+        input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
+        input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
 
-    embed = word_embedding_layer(vectors, max_length)
+        embed = word_embedding_layer(vectors, max_length)
 
-    x1 = embed(input1)
-    x2 = embed(input2)
+        x1 = embed(input1)
+        x2 = embed(input2)
+
+    elif embedding_type == "sentence":
+
+        input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
+        input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
+
+        bert = sentence_embedding_layer()
+
+        x1 = bert(input1)
+        x2 = bert(input2)
+
+    else:
+        print("unknown embedding type, Embedding type can only be 'word' or 'sentence' ")
 
     # step 1: attend
     F = create_feedforward(num_units=nr_hidden)
@@ -45,12 +56,22 @@ def decomp_attention_model(vectors, shape, settings, embedding_type):
     model = Model([input1, input2], out)
 
     model.compile(
-        optimizer=optimizers.Adam(lr=settings["lr"]),
+        optimizer=optimizers.Adam(lr=learning_rate),
         loss="categorical_crossentropy",
         metrics=["accuracy"],
     )
 
     return model
+
+
+def sentence_embedding_layer():
+    return models.Sequential(
+        [
+            layers.Reshape(
+                (1, 1024), input_shape=(1024,)
+            ),
+        ]
+    )
 
 
 def word_embedding_layer(vectors, max_length):
@@ -89,3 +110,6 @@ def normalizer(axis):
 
 def sum_word(x):
     return K.sum(x, axis=1)
+
+
+__all__ = [decomposable_attention_model]

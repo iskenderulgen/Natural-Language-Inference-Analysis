@@ -5,11 +5,11 @@ import sys
 import plac
 from keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
-from model import esim_bilstm_model, decomp_attention_model
+from models.esim import esim_bilstm_model
 from prediction import SpacyPrediction, BertWordPredict
-from prediction_based.bert_encoder import bert_transformer
-from pretrained_based.bert_initial_weights import bert_initial_weights_transformer
-from pretrained_based.word_vectors import spacy_word_transformer
+from train.bert_contextualized_sentence_encoder import bert_transformer
+from train.bert_pretrained_wv_transformer import bert_initial_weights_transformer
+from train.pretrained_wv_transformer import spacy_word_transformer
 from utils.utils import read_snli, load_spacy_nlp, attention_visualization, xml_test
 
 path = "/media/ulgen/Samsung/contradiction_data/"
@@ -17,68 +17,68 @@ xml_path1 = path + "attention_maps/a/data/UKPConvArg1Strict-XML/christianity-or-
 xml_path2 = path + "attention_maps/a/data/UKPConvArg1Strict-XML/christianity-or-atheism-_atheism.xml"
 
 
-def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type):
-    train_x, train_labels, dev_x, dev_labels, model = None, None, None, None, None
-    if transformer_type == 'glove':  # or 'word2vec' or 'fasttext':
-        train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
-                                                                                   dev_loc=dev_loc, shape=shape,
-                                                                                   transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings, embedding_type=embedding_type)
-
-    elif transformer_type == 'bert_initial_word':
-        train_x, train_labels, dev_x, dev_labels, word_weights = bert_initial_weights_transformer(path=path,
-                                                                                                  train_loc=train_loc,
-                                                                                                  dev_loc=dev_loc,
-                                                                                                  transformer_type=transformer_type)
-        model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings,
-                                       embedding_type=embedding_type)
-
-    elif transformer_type == 'bert_sentence':
-        train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
-                                                                    dev_loc=dev_loc, feature_type=transformer_type)
-        model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
-
-    else:
-        print("Please define transformer method properly")
-
-    model.summary()
-
-    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=4, restore_best_weights=True)
-
-    history = model.fit(
-        train_x,
-        train_labels,
-        validation_data=(dev_x, dev_labels),
-        epochs=settings["nr_epoch"],
-        batch_size=settings["batch_size"],
-        verbose=1,
-        callbacks=[es]
-    )
-
-    # summarize history for accuracy
-    plt.plot(history.history['accuracy'])
-    plt.plot(history.history['val_accuracy'])
-    plt.title('model accuracy')
-    plt.ylabel('accuracy')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
-    # summarize history for loss
-    plt.plot(history.history['loss'])
-    plt.plot(history.history['val_loss'])
-    plt.title('model loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
-
-    print('\nhistory dict:', history.history)
-
-    if not os.path.isdir(path + 'similarity'):
-        os.mkdir(path + 'similarity')
-    print("Saving to", path + 'similarity')
-
-    model.save(path + 'similarity/' + transformer_type + "_" + "model.h5")
+# def train(train_loc, dev_loc, shape, settings, transformer_type, embedding_type):
+#     train_x, train_labels, dev_x, dev_labels, model = None, None, None, None, None
+#     if transformer_type == 'glove':  # or 'word2vec' or 'fasttext':
+#         train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(path=path, train_loc=train_loc,
+#                                                                                    dev_loc=dev_loc, shape=shape,
+#                                                                                    transformer_type=transformer_type)
+#         model = esim_bilstm_model(vectors=vectors, shape=shape, settings=settings, embedding_type=embedding_type)
+#
+#     elif transformer_type == 'bert_initial_word':
+#         train_x, train_labels, dev_x, dev_labels, word_weights = bert_initial_weights_transformer(path=path,
+#                                                                                                   train_loc=train_loc,
+#                                                                                                   dev_loc=dev_loc,
+#                                                                                                   transformer_type=transformer_type)
+#         model = esim_bilstm_model(vectors=word_weights, shape=shape, settings=settings,
+#                                        embedding_type=embedding_type)
+#
+#     elif transformer_type == 'bert_sentence':
+#         train_x, train_labels, dev_x, dev_labels = bert_transformer(path=path, train_loc=train_loc,
+#                                                                     dev_loc=dev_loc, feature_type=transformer_type)
+#         model = esim_bilstm_model(shape=shape, settings=settings, embedding_type=embedding_type, vectors=None)
+#
+#     else:
+#         print("Please define transformer method properly")
+#
+#     model.summary()
+#
+#     es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=4, restore_best_weights=True)
+#
+#     history = model.fit(
+#         train_x,
+#         train_labels,
+#         validation_data=(dev_x, dev_labels),
+#         epochs=settings["nr_epoch"],
+#         batch_size=settings["batch_size"],
+#         verbose=1,
+#         callbacks=[es]
+#     )
+#
+#     # summarize history for accuracy
+#     plt.plot(history.history['accuracy'])
+#     plt.plot(history.history['val_accuracy'])
+#     plt.title('model accuracy')
+#     plt.ylabel('accuracy')
+#     plt.xlabel('epoch')
+#     plt.legend(['train', 'test'], loc='upper left')
+#     plt.show()
+#     # summarize history for loss
+#     plt.plot(history.history['loss'])
+#     plt.plot(history.history['val_loss'])
+#     plt.title('model loss')
+#     plt.ylabel('loss')
+#     plt.xlabel('epoch')
+#     plt.legend(['train', 'test'], loc='upper left')
+#     plt.show()
+#
+#     print('\nhistory dict:', history.history)
+#
+#     if not os.path.isdir(path + 'similarity'):
+#         os.mkdir(path + 'similarity')
+#     print("Saving to", path + 'similarity')
+#
+#     model.save(path + 'similarity/' + transformer_type + "_" + "model.h5")
 
 
 def evaluate(dev_loc, shape, transformer_type):
@@ -148,7 +148,7 @@ def demo_listlike(shape, transformer_type):
         print("total entailment =", entailment / total)
         print("total neutral =", neutral / total)
 
-    elif transformer_type == 'bert_initial_word':
+    elif transformer_type == 'bert_snli_mnli_anli/':
         BertWordPredict.predict(
             premises=premises, hypothesis=hypothesis, path=path, transformer_type=transformer_type,
             eval_type='demo_listlike', label=None)
@@ -205,12 +205,12 @@ def demo(shape, visualization, transformer_type):
 
 
 def main(
-        mode="evaluate",
+        mode="demo_listlike",
         embedding_type="word",
-        transformer_type="bert_initial_word",
-        train_loc=path + "SNLI_MNLI/snli/total_train.jsonl",
-        dev_loc=path + "SNLI_MNLI/snli/total_dev.jsonl",
-        test_loc=path + "SNLI_MNLI/snli/snli_test.jsonl",
+        transformer_type="bert_snli_mnli_anli/",
+        train_loc=path + "ANLI/R1/train.jsonl",
+        dev_loc=path + "ANLI/R1/dev.jsonl",
+        test_loc=path + "SNLI_MNLI/mnli/mnli_test.jsonl",
         max_length=64,  # 64 for word based #1024 for bert_dependencies sentence
         nr_hidden=300,
         dropout=0.2,
@@ -230,8 +230,8 @@ def main(
         if train_loc is None or dev_loc is None:
             print("Train mode requires paths to training and development data sets.")
             sys.exit(1)
-        train(train_loc=train_loc, dev_loc=dev_loc, shape=shape, settings=settings,
-              transformer_type=transformer_type, embedding_type=embedding_type)
+        #train(train_loc=train_loc, dev_loc=dev_loc, shape=shape, settings=settings,
+        #      transformer_type=transformer_type, embedding_type=embedding_type)
     elif mode == "evaluate":
         if dev_loc is None:
             print("Evaluate mode requires paths to test data set.")
