@@ -3,51 +3,26 @@
 # Paths
 
 main_path: "/media/ulgen/Samsung/contradiction_data/"
-nli_set: "/media/ulgen/Samsung/contradiction_data/nli_set/"
-processed_nli: "/media/ulgen/Samsung/contradiction_data/processed_nli"
-results: "/media/ulgen/Samsung/contradiction_data/results"
+nli_set_train: "/media/ulgen/Samsung/contradiction_data/nli_sets/train.jsonl"
+nli_set_dev: "/media/ulgen/Samsung/contradiction_data/nli_sets/dev.jsonl"
+nli_set_test: "/media/ulgen/Samsung/contradiction_data/nli_sets/test.jsonl"
+processed_nli: "/media/ulgen/Samsung/contradiction_data/processed_nli/"
+results: "/media/ulgen/Samsung/contradiction_data/results/"
 
 
-# Processed File Paths
+# Trained model paths
 
-snli_word2vec_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/word2vec/"
-snli_glove_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/glove/"
-snli_fasttext_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/fasttext/"
+model_paths:
+  esim: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/"
+  decomposable_attention: "media/ulgen/Samsung/contradiction_data/nli_models/decomposable_attention/"
 
-snli_bert_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert/bert_pretrained_snli/"
-snli_bert_sentence_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert_sentence/"
-snli_mnli_bert_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert/bert_pretrained_snli_mnli/"
-snli_mnli_anli_bert_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert/bert_pretrained_snli_mnli_anli/"
-anli_bert_processed: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert/bert_pretrained_anli/"
-bert_weights: "/media/ulgen/Samsung/contradiction_data/Processed_SNLI/bert/weights.pkl"
+# Transformers Paths
 
-# Trained ESIM Model Paths
-
-esim_bert_anli_r1: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_anli_r1/"
-esim_bert_anli_r2: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_anli_r2/"
-esim_bert_anli_r3: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_anli_r3/"
-esim_bert_snli: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_snli/"
-esim_bert_snli_mnli: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_snli_mnli/"
-esim_bert_snli_mnli_anli: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/snli_mnli_anli/"
-esim_bert_fasttext: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_fasttext"
-esim_bert_glove: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_glove"
-esim_bert_word2vec: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/bert_word2vec"
-
-# Trained Decomposable Attention Model Paths
-
-decomposable_attention_bert_snli: "/media/ulgen/Samsung/contradiction_data/similarity/decomposable_attention/bert_snli/"
-decomposable_attention_bert_snli_mnli: "/media/ulgen/Samsung/contradiction_data/similarity/decomposable_attention/bert_snli_mnli/"
-decomposable_attention_fasttext: "/media/ulgen/Samsung/contradiction_data/similarity/decomposable_attention/fasttext/"
-decomposable_attention_glove: "/media/ulgen/Samsung/contradiction_data/similarity/decomposable_attention/glove/"
-decomposable_attention_word2vec: "/media/ulgen/Samsung/contradiction_data/similarity/decomposable_attention/word2vec/"
-
-
-# Transformers Path
-
-bert_transformer: "/media/ulgen/Samsung/contradiction_data/transformers/bert"
-fasttext_transformer: "/media/ulgen/Samsung/contradiction_data/transformers/fasttext"
-word2vec_transformer: "/media/ulgen/Samsung/contradiction_data/transformers/word2vec"
-
+transformer_paths:
+  bert: "/media/ulgen/Samsung/contradiction_data/transformers/bert/"
+  fasttext: "/media/ulgen/Samsung/contradiction_data/transformers/fasttext/"
+  word2vec: "/media/ulgen/Samsung/contradiction_data/transformers/word2vec/"
+  glove: "/media/ulgen/Samsung/contradiction_data/transformers/glove/"
 
 # Network Parameters
 
@@ -59,3 +34,4 @@ learn_rate: 0.0004
 batch_size: 32
 nr_epoch: 20
 nr_class: 3
+early_stopping: 4
