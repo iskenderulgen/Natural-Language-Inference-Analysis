@@ -10,32 +10,93 @@ import pickle
 import cupy as cp
 import numpy as np
 import plac
-import yaml
 from keras.callbacks import EarlyStopping
 
-from utils.utils import read_snli, load_spacy_nlp
+from utils.utils import read_snli, load_spacy_nlp, load_configurations
 from models.esim import esim_bilstm_model
 from models.decomposable_attention import decomposable_attention_model
 import matplotlib.pyplot as plt
 
-
-with open("/home/ulgen/Documents/Python_Projects/Contradiction/configurations.yaml", 'r') as stream:
-    try:
-        configs = (yaml.safe_load(stream))
-    except yaml.YAMLError as exc:
-        print(exc)
-
+configs = load_configurations()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--transformer_path", type=str, default=None,
-                    help="Transformer model path that will convert text to vectors")
-parser.add_argument("processed_path",type=str, default=None,
-                    help="")
+parser.add_argument("--transformer_type", type=str, default="glove",
+                    help="type of the transformer which will convert texts in to word-ids. Currently three types "
+                         "are supported.Here the types as follows 'glove' -  'fasttext' - 'word2vec'."
+                         "Pick one you'd like to transform into")
+
+parser.add_argument("--embedding_type", type=str, default="word",
+                    help="For word embedding base models use 'word' keyword,"
+                         "For sentence embedding base models use 'sentence' keyword. "
+                         "Required embedding layer will be triggered based on selection")
+
+parser.add_argument("--model_type", type=str, default="esim",
+                    help="Type of the model that will be trained. "
+                         "for ESIM model type 'esim' "
+                         "for decomposable attention model type 'decomposable_attention'. ")
+
+parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
+                    help="main transformer model path which will convert the text in to word-ids and vectors. "
+                         "transformer path has four sub paths, load_nlp module will carry out the sub model paths"
+                         "based on transformer type selection")
+
+parser.add_argument("--train_loc", type=str, default=configs["nli_set_train"],
+                    help="Train data location which will be processed via transformers and be saved to processed_path "
+                         "location")
+
+parser.add_argument("--dev_loc", type=str, default=configs["nli_set_dev"],
+                    help="Train data dev location which will be used to measure train accuracy while training model,"
+                         "files will be processed using transformer and be saved to processed path")
+
+parser.add_argument("--max_length", type=str, default=configs["max_length"],
+                    help="max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
+                         "padded. Remember longer sentences means longer sequences to train. Select best length based"
+                         "on your rig.")
+
+parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
+                    help="number of unknown vectors which will be used for padding the short sentences to desired"
+                         "length.Nr unknown vectors will be created using random module")
+
+parser.add_argument("--processed_path", type=str, default=configs["processed_nli"],
+                    help="Path where the transformed texts will be saved to as word-ids. Will be used for embedding"
+                         "layer of the train models.")
+
+parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
+                    help="The path where trained NLI model will be saved.")
+
+parser.add_argument("--batch_size", type=int, default=configs["batch_size"],
+                    help="batch size of model, it represents the amount of data the model will train for each pass.")
+
+parser.add_argument("--nr_epoch", type=int, default=configs["nr_epoch"],
+                    help="Total number of times that model will iterate trough the data.")
+
+parser.add_argument("--nr_hidden", type=int, default=configs["nr_hidden"],
+                    help="hidden neuron size of the model")
+
+parser.add_argument("--nr_class", type=int, default=configs["nr_class"],
+                    help="number of class that will model classify the data into. Also represents the last layer of"
+                         "the model.")
+
+parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"],
+                    help="learning rate parameter that represent the constant which will be multiplied with the data"
+                         "in each back propagation")
+
+parser.add_argument("--result_path", type=str, default=configs["results"],
+                    help="path of the file where trained model loss and accuracy graphs will be saved.")
 args = parser.parse_args()
 
 
 def create_dataset_ids(nlp, premises, hypothesis, num_unk, max_length):
-    """This section creates id matrix of the input tokens"""
+    """
+    This function takes hypothesis and premises as list and converts them to word-ids matrix of the input tokens
+    based on lookup table which will be converted to vectors in the embedding layer of the training model.
+    :param nlp: Transformer model which has the lookup table
+    :param premises: opinion sentence
+    :param hypothesis: opinion sentence
+    :param num_unk: unknown word count that will be filled with norm_random vectors
+    :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
+    :return: returns word ids as a list.
+    """
 
     sentences = premises + hypothesis
     sentences_as_ids = []
@@ -76,6 +137,15 @@ def create_dataset_ids(nlp, premises, hypothesis, num_unk, max_length):
 
 
 def get_embeddings(vocab, nr_unk):
+    """
+    This function takes the embeddings vectors from nlp object and adds the unknown word vectors to it. Later it
+    saves the whole new vector object to disk as okl file. It will be used in embedding layer to match the word ids
+    with corresponding vectors.
+    :param vocab: nlp vocabulary object that has words and vectors.
+    :param nr_unk: unknown word vector size that will be used to create random_norm vectors for out of vocabulary words.
+    :return: returns new vector table.
+    """
+
     # the extra +1 is for a zero vector representing sentence-final padding
     num_vectors = max(lex.rank for lex in vocab) + 2
 
@@ -94,7 +164,21 @@ def get_embeddings(vocab, nr_unk):
     return vectors
 
 
-def spacy_word_transformer(transformer_path, processed_path, train_loc, dev_loc, max_length, transformer_type, nr_unk):
+def spacy_word_transformer(transformer_path, transformer_type, train_loc, dev_loc, max_length, nr_unk, processed_path):
+    """
+    This function reads NLI sets and processes them trough the functions above. Takes sentences as list and transforms
+    them in to word-id matrix. This word_id matrix will be then saved to disk as pkl file to be read and used in
+    embedding layer of the madel. Currently this method supports glove - fasttext and word2vec pretrained weights.
+    :param transformer_path: Path of the transformer nlp object.
+    :param transformer_type: Type of the transformer glove - fasttext or word2vec.
+    :param train_loc: training NLI jsonl date location.
+    :param dev_loc: dev NLI jsonl date location
+    :param max_length: Max length of the sentence. Longer ones will be pruned shorter ones will be padded.
+    :param nr_unk: Number of unknown word size. Random weight will be created based on this unk word size
+    :param processed_path: Path where the processed files will be based.
+    :return: returns train - dev set and corresponding labels with word weights.
+    """
+    
     print("Starting to pre-process using spacy. Transformer type is ", transformer_type)
 
     nlp = load_spacy_nlp(transformer_path=transformer_path, transformer_type=transformer_type)
@@ -103,47 +187,69 @@ def spacy_word_transformer(transformer_path, processed_path, train_loc, dev_loc,
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
 
     if not os.path.isdir(processed_path):
-        print("Processed_SNLI directory is not exist, it's now created")
+        print("Processed_nli directory is not exist, it's now created")
         os.mkdir(processed_path)
 
-    if os.path.isfile(path=processed_path + transformer_type + "/train_x.pkl"):
+    if os.path.isfile(path=processed_path + "/train_x.pkl"):
         print(transformer_type, "based Pre-Processed train file is found now loading...")
-        with open(processed_path + transformer_type + "/train_x.pkl", "rb") as f:
+        with open(processed_path + "train_x.pkl", "rb") as f:
             train_x = pickle.load(f)
     else:
-        print(transformer_type, "based pre-processed file of train_X isn't exist, Pre-Process will start now")
+        print(transformer_type, "based pre-processed file of train_nli isn't exist, pre process starts now")
         train_x = create_dataset_ids(nlp=nlp, premises=train_texts1, hypothesis=train_texts2, num_unk=nr_unk,
                                      max_length=max_length)
-        with open(processed_path + transformer_type + "/train_x.pkl", "wb") as f:
+        with open(processed_path + "train_x.pkl", "wb") as f:
             pickle.dump(train_x, f)
 
-    if os.path.isfile(path=processed_path + transformer_type + "/dev_x.pkl"):
-        print(transformer_type, "based Pre-Processed dev file is found now loading...")
-        with open(processed_path + transformer_type + "/dev_x.pkl", "rb") as f:
+    if os.path.isfile(path=processed_path + "/dev_x.pkl"):
+        print(transformer_type, "based pre processed dev file is found, now loading...")
+        with open(processed_path + "dev_x.pkl", "rb") as f:
             dev_x = pickle.load(f)
     else:
-        print(transformer_type, "based pre-processed file of dev_X isn't exist, Pre-Process will start now")
+        print(transformer_type, "based pre processed file of train_dev isn't exist, pre process will start now.")
         dev_x = create_dataset_ids(nlp=nlp, premises=dev_texts1, hypothesis=dev_texts2, num_unk=nr_unk,
                                    max_length=max_length)
-        with open(processed_path + transformer_type + "/dev_x.pkl", "wb") as f:
+        with open(processed_path + "dev_x.pkl", "wb") as f:
             pickle.dump(dev_x, f)
 
-    if os.path.isfile(path=processed_path + transformer_type + "/weights.pkl"):
+    if os.path.isfile(path=transformer_path[transformer_type] + "weights.pkl"):
         print(transformer_type, "weights matrix already extracted, now loading...")
-        with open(processed_path + transformer_type + "/weights.pkl", "rb") as f:
+        with open(transformer_path[transformer_type] + "weights.pkl", "rb") as f:
             vectors = pickle.load(f)
     else:
         print(transformer_type, " weight matrix is not found, now extracting...")
         vectors = get_embeddings(vocab=nlp.vocab, nr_unk=nr_unk)
-        with open(processed_path + transformer_type + "/weights.pkl", "wb") as f:
+        with open(transformer_path[transformer_type] + "weights.pkl", "wb") as f:
             pickle.dump(vectors, f)
 
     return train_x, train_labels, dev_x, dev_labels, vectors
 
 
 def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
-                nr_hidden, nr_class, learning_rate, embedding_type,
-                train_x, train_labels, dev_x, dev_labels, vectors):
+                nr_hidden, nr_class, learning_rate, embedding_type, early_stopping,
+                train_x, train_labels, dev_x, dev_labels, vectors, result_path):
+    """
+    Model will be trained in this function. Currently it supports ESIM and Decomposable Attention models.
+    :param model_save_path: Path where the model will be saved as h5 file.
+    :param model_type: type of the model. either ESIM or Decomposable attention.
+    :param max_length: Max length of the sentence / sequence.
+    :param batch_size: Size of the train data will be feed forwarded on each iteration.
+    :param nr_epoch: Total number of times the model iterates trough all the training data.
+    :param nr_hidden: Hidden neuron size of the model
+    :param nr_class: Number of classed that model will classify into. Also the last layer of the model.
+    :param learning_rate: Constant rate that will be used on each back propagation.
+    :param embedding_type: Definition of the embeddings for the model. For word embedding based model, 'word' keyword,
+    for sentence based model 'sentence' should be selected.
+    :param early_stopping: Parameter that stops the training when the validation accuracy cant go higher.
+    :param train_x: Training data.
+    :param train_labels: Training labels.
+    :param dev_x: developer data
+    :param dev_labels: developer labels
+    :param vectors: embedding vectors of the words.
+    :param result_path: Path where accuracy and loss graphs will be saved along with the model history.
+    :return: None
+    """
+
     model = None
 
     if model_type == "esim":
@@ -159,7 +265,8 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
 
     model.summary()
 
-    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=4, restore_best_weights=True)
+    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1,
+                       patience=early_stopping, restore_best_weights=True)
 
     history = model.fit(
         train_x,
@@ -171,6 +278,9 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
         callbacks=[es]
     )
 
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
     # summarize history for accuracy
     plt.plot(history.history['accuracy'])
     plt.plot(history.history['val_accuracy'])
@@ -179,6 +289,8 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
     plt.show()
+    plt.savefig(result_path + 'accuracy.png', bbox_inches='tight')
+
     # summarize history for loss
     plt.plot(history.history['loss'])
     plt.plot(history.history['val_loss'])
@@ -187,25 +299,49 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
     plt.show()
+    plt.savefig(result_path + 'loss.png', bbox_inches='tight')
 
-    print('\nhistory dict:', history.history)
+    print('\n model history:', history.history)
+
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    with open(result_path + 'result_history.txt', 'w') as file:
+        file.write(str(history.history))
 
     if not os.path.isdir(model_save_path):
         os.mkdir(model_save_path)
     print("Saving to", model_save_path)
 
-    model.save(model_save_path + model_type + "/model.h5")
+    model.save(model_save_path[model_type] + "model.h5")
 
 
 def main():
+    train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(transformer_path=args.transformer_path,
+                                                                               processed_path=args.processed_path,
+                                                                               train_loc=args.train_loc,
+                                                                               dev_loc=args.dev_loc,
+                                                                               max_length=args.max_length,
+                                                                               transformer_type=args.transformer_type,
+                                                                               nr_unk=args.nr_unk)
 
-    train_x, train_labels, dev_x, dev_labels, vectors = spacy_word_transformer(transformer_path=, processed_path=,
-                                                                               train_loc=, dev_loc=, max_length=,
-                                                                               transformer_type=, nr_unk=)
+    train_model(model_save_path=args.model_save_path,
+                model_type=args.model_type,
+                max_length=args.max_length,
+                batch_size=args.batch_size,
+                nr_epoch=args.nr_epoch,
+                nr_hidden=args.nr_hidden,
+                nr_class=args.nr_class,
+                learning_rate=args.learning_rate,
+                embedding_type=args.embedding_type,
+                early_stopping=args.early_stopping,
+                train_x=train_x,
+                train_labels=train_labels,
+                dev_x=dev_x,
+                dev_labels=dev_labels,
+                vectors=vectors,
+                result_path=args.result_path)
 
-    train_model(model_save_path=, model_type=, max_length=, batch_size=, nr_epoch=,
-                nr_hidden=, nr_class=, learning_rate=, embedding_type=,
-                train_x=, train_labels=, dev_x=, dev_labels=, vectors=)
 
 if __name__ == "__main__":
     plac.call(main)
