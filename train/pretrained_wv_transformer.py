@@ -246,7 +246,7 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     :param dev_x: developer data
     :param dev_labels: developer labels
     :param vectors: embedding vectors of the words.
-    :param result_path: Path where accuracy and loss graphs will be saved along with the model history.
+    :param result_path: path where accuracy and loss graphs will be saved along with the model history.
     :return: None
     """
 
