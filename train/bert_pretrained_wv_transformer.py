@@ -106,7 +106,7 @@ parser.add_argument("--result_path", type=str, default=configs["results"],
 args = parser.parse_args()
 
 
-def convert_examples_to_features(premises, hypothesis, seq_length, transformer_path, transformer_type):
+def convert_examples_to_features(premises, hypothesis, seq_length, bert_directory):
     """
     This function used bert transformer to create word ids of tokens. This process is similar to pre trained word
     weight transformation, uses the bert initial pretrained word weights to create vectors. Compared to priors bert
@@ -114,8 +114,7 @@ def convert_examples_to_features(premises, hypothesis, seq_length, transformer_p
     :param premises: opinion sentence
     :param hypothesis: opinion sentence
     :param seq_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
-    :param transformer_path: path of the transformer object. Bert files location
-    :param transformer_type: type of the transformer, this parameter goes only with 'bert'.
+    :param bert_directory: path of the transformer object. Bert files location.
     :return: returns word ids as a list.
     """
 
@@ -128,7 +127,7 @@ def convert_examples_to_features(premises, hypothesis, seq_length, transformer_p
     start_time = datetime.datetime.now()
 
     tokenizer = tokenization.FullTokenizer(
-        vocab_file=transformer_path[transformer_type] + "vocab.txt", do_lower_case=args.do_lower_case)
+        vocab_file=bert_directory + "vocab.txt", do_lower_case=args.do_lower_case)
 
     for (ex_index, example) in enumerate(sentences):
         line = tokenization.convert_to_unicode(example).strip()
@@ -219,7 +218,7 @@ def bert_pretrained_transformer(transformer_path, transformer_type, train_loc, d
         print("There is no pre-processed file of train_X, Pre-Process will start now")
 
         train_x = convert_examples_to_features(premises=train_texts1, hypothesis=train_texts2, seq_length=max_length,
-                                               transformer_path=transformer_path, transformer_type=transformer_type)
+                                               bert_directory=transformer_path[transformer_type])
         with open(processed_path + "train_x.pkl", "wb") as f:
             pickle.dump(train_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -230,7 +229,7 @@ def bert_pretrained_transformer(transformer_path, transformer_type, train_loc, d
     else:
         print("There is no pre-processed file of dev_X, Pre-Process will start now")
         dev_x = convert_examples_to_features(premises=dev_texts1, hypothesis=dev_texts2, seq_length=max_length,
-                                             transformer_path=transformer_path, transformer_type=transformer_type)
+                                            bert_directory=transformer_path[transformer_type])
         with open(processed_path + "dev_x.pkl", "wb") as f:
             pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
