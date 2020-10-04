@@ -30,9 +30,9 @@ import pickle
 import numpy as np
 import plac
 import tensorflow as tf
-from keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
 
+from keras.callbacks import EarlyStopping
 from models.decomposable_attention import decomposable_attention_model
 from models.esim import esim_bilstm_model
 from utils.utils import read_snli, load_configurations
@@ -229,7 +229,7 @@ def bert_pretrained_transformer(transformer_path, transformer_type, train_loc, d
     else:
         print("There is no pre-processed file of dev_X, Pre-Process will start now")
         dev_x = convert_examples_to_features(premises=dev_texts1, hypothesis=dev_texts2, seq_length=max_length,
-                                            bert_directory=transformer_path[transformer_type])
+                                             bert_directory=transformer_path[transformer_type])
         with open(processed_path + "dev_x.pkl", "wb") as f:
             pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
