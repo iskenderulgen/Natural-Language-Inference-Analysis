@@ -90,7 +90,7 @@ def create_dataset_ids(nlp, premises, hypothesis, num_unk, max_length):
     """
     This function takes hypothesis and premises as list and converts them to word-ids matrix of the input tokens
     based on lookup table which will be converted to vectors in the embedding layer of the training model.
-    :param nlp: Transformer model which has the lookup table
+    :param nlp: transformer model which has the lookup table
     :param premises: opinion sentence
     :param hypothesis: opinion sentence
     :param num_unk: unknown word count that will be filled with norm_random vectors
@@ -169,13 +169,13 @@ def spacy_word_transformer(transformer_path, transformer_type, train_loc, dev_lo
     This function reads NLI sets and processes them trough the functions above. Takes sentences as list and transforms
     them in to word-id matrix. This word_id matrix will be then saved to disk as pkl file to be read and used in
     embedding layer of the madel. Currently this method supports glove - fasttext and word2vec pretrained weights.
-    :param transformer_path: Path of the transformer nlp object.
-    :param transformer_type: Type of the transformer glove - fasttext or word2vec.
+    :param transformer_path: path of the transformer nlp object.
+    :param transformer_type: type of the transformer glove - fasttext or word2vec.
     :param train_loc: training NLI jsonl date location.
     :param dev_loc: dev NLI jsonl date location
-    :param max_length: Max length of the sentence. Longer ones will be pruned shorter ones will be padded.
-    :param nr_unk: Number of unknown word size. Random weight will be created based on this unk word size
-    :param processed_path: Path where the processed files will be based.
+    :param max_length: max length of the sentence. Longer ones will be pruned shorter ones will be padded.
+    :param nr_unk: number of unknown word size. Random weight will be created based on this unk word size
+    :param processed_path: path where the processed files will be based.
     :return: returns train - dev set and corresponding labels with word weights.
     """
     
@@ -230,19 +230,19 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
                 train_x, train_labels, dev_x, dev_labels, vectors, result_path):
     """
     Model will be trained in this function. Currently it supports ESIM and Decomposable Attention models.
-    :param model_save_path: Path where the model will be saved as h5 file.
+    :param model_save_path: path where the model will be saved as h5 file.
     :param model_type: type of the model. either ESIM or Decomposable attention.
-    :param max_length: Max length of the sentence / sequence.
+    :param max_length: max length of the sentence / sequence.
     :param batch_size: Size of the train data will be feed forwarded on each iteration.
-    :param nr_epoch: Total number of times the model iterates trough all the training data.
+    :param nr_epoch: total number of times the model iterates trough all the training data.
     :param nr_hidden: Hidden neuron size of the model
-    :param nr_class: Number of classed that model will classify into. Also the last layer of the model.
-    :param learning_rate: Constant rate that will be used on each back propagation.
-    :param embedding_type: Definition of the embeddings for the model. For word embedding based model, 'word' keyword,
+    :param nr_class: number of classed that model will classify into. Also the last layer of the model.
+    :param learning_rate: constant rate that will be used on each back propagation.
+    :param embedding_type: definition of the embeddings for the model. For word embedding based model, 'word' keyword,
     for sentence based model 'sentence' should be selected.
-    :param early_stopping: Parameter that stops the training when the validation accuracy cant go higher.
-    :param train_x: Training data.
-    :param train_labels: Training labels.
+    :param early_stopping: parameter that stops the training when the validation accuracy cant go higher.
+    :param train_x: training data.
+    :param train_labels: training labels.
     :param dev_x: developer data
     :param dev_labels: developer labels
     :param vectors: embedding vectors of the words.
