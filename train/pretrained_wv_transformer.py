@@ -10,12 +10,13 @@ import pickle
 import cupy as cp
 import numpy as np
 import plac
-from keras.callbacks import EarlyStopping
+import matplotlib.pyplot as plt
 
+from keras.callbacks import EarlyStopping
 from utils.utils import read_snli, load_spacy_nlp, load_configurations
 from models.esim import esim_bilstm_model
 from models.decomposable_attention import decomposable_attention_model
-import matplotlib.pyplot as plt
+
 
 configs = load_configurations()
 
