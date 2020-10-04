@@ -21,23 +21,25 @@ from __future__ import print_function
 import argparse
 import os
 import pickle
-
 import numpy as np
+import plac
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
+from keras.callbacks import EarlyStopping
 from bert_dependencies import modeling, tokenization
-from utils.utils import read_snli
+from models.decomposable_attention import decomposable_attention_model
+from models.esim import esim_bilstm_model
+from utils.utils import read_snli, load_configurations
+
+configs = load_configurations()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--layers", type=str, default="-1", help="Choose the layers that will be extracted")
-parser.add_argument("--max_seq_length", type=int, default=50,
-                    help="The maximum total input sequence length after WordPiece tokenization. "
-                         "Sequences longer than this will be truncated, and sequences shorter "
-                         "than this will be padded.")
+parser.add_argument("--layers", type=str, default="-1,-2,-3,-4",
+                    help="Choose the layers that will be extracted. Default we take the last four layers into account.")
 parser.add_argument("--do_lower_case", type=bool, default=True,
                     help="Whether to lower case the input text. Should be True for uncased "
                          "models and False for cased models.")
-parser.add_argument("--batch_size", type=int, default=32, help="Batch size for predictions.")
 parser.add_argument("--use_tpu", type=bool, default=False, help="Whether to use TPU or GPU/CPU.")
 parser.add_argument("--master", default=None, help="If using a TPU, the address of the master.")
 parser.add_argument("--num_tpu_cores", type=int, default=8,
@@ -46,6 +48,69 @@ parser.add_argument("--use_one_hot_embeddings", type=bool, default=False,
                     help="If True, tf.one_hot will be used for embedding lookups, otherwise "
                          "tf.nn.embedding_lookup will be used. On TPUs, this should be True "
                          "since it is much faster.")
+
+parser.add_argument("--transformer_type", type=str, default="bert",
+                    help="type of the transformer which will convert texts in to word-ids. This script only for bert,"
+                         "so default transformer type remains 'bert'")
+
+parser.add_argument("--embedding_type", type=str, default="sentence",
+                    help="For word embedding base models use 'word' keyword,"
+                         "For sentence embedding base models use 'sentence' keyword. "
+                         "Required embedding layer will be triggered based on selection")
+
+parser.add_argument("--model_type", type=str, default="decomposable_attention",
+                    help="Type of the model that will be trained. "
+                         "for ESIM model type 'esim' "
+                         "for decomposable attention model type 'decomposable_attention'. ")
+
+parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
+                    help="main transformer model path which will convert the text in to word-ids and vectors. "
+                         "transformer path has four sub paths, load_nlp module will carry out the sub model paths"
+                         "based on transformer type selection")
+
+parser.add_argument("--train_loc", type=str, default=configs["nli_set_train"],
+                    help="Train data location which will be processed via transformers and be saved to processed_path "
+                         "location")
+
+parser.add_argument("--dev_loc", type=str, default=configs["nli_set_dev"],
+                    help="Train data dev location which will be used to measure train accuracy while training model,"
+                         "files will be processed using transformer and be saved to processed path")
+
+parser.add_argument("--max_length", type=str, default=configs["max_length"],
+                    help="max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
+                         "padded. Remember longer sentences means longer sequences to train. Select best length based"
+                         "on your rig.")
+
+parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
+                    help="number of unknown vectors which will be used for padding the short sentences to desired"
+                         "length.Nr unknown vectors will be created using random module")
+
+parser.add_argument("--processed_path", type=str, default=configs["processed_nli"],
+                    help="Path where the transformed texts will be saved to as word-ids. Will be used for embedding"
+                         "layer of the train models.")
+
+parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
+                    help="The path where trained NLI model will be saved.")
+
+parser.add_argument("--batch_size", type=int, default=configs["batch_size"],
+                    help="batch size of model, it represents the amount of data the model will train for each pass.")
+
+parser.add_argument("--nr_epoch", type=int, default=configs["nr_epoch"],
+                    help="Total number of times that model will iterate trough the data.")
+
+parser.add_argument("--nr_hidden", type=int, default=configs["nr_hidden"],
+                    help="hidden neuron size of the model")
+
+parser.add_argument("--nr_class", type=int, default=configs["nr_class"],
+                    help="number of class that will model classify the data into. Also represents the last layer of"
+                         "the model.")
+
+parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"],
+                    help="learning rate parameter that represent the constant which will be multiplied with the data"
+                         "in each back propagation")
+
+parser.add_argument("--result_path", type=str, default=configs["results"],
+                    help="path of the file where trained model loss and accuracy graphs will be saved.")
 args = parser.parse_args()
 
 
@@ -120,7 +185,7 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
                      use_one_hot_embeddings):
     """Returns `model_fn` closure for TPUEstimator."""
 
-    def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
+    def model_fn(features, mode):  # pylint: disable=unused-argument
         """The `model_fn` for TPUEstimator."""
 
         unique_ids = features["unique_ids"]
@@ -252,7 +317,7 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
 
         if ex_index < 5:
             tf.logging.info("*** Example ***")
-            tf.logging.info("unique_id: %s" % (example.unique_id))
+            tf.logging.info("unique_id: %s" % example.unique_id)
             tf.logging.info("tokens: %s" % " ".join(
                 [tokenization.printable_text(x) for x in tokens]))
             tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
@@ -291,22 +356,20 @@ def read_examples(input_sentences):
     """Read a list of `InputExample`s from an input file."""
     examples = []
     unique_id = 0
-    total_sents = len(input_sentences)
-    print("Total sentences to be processed is:", total_sents)
 
-    if type(input_sentences) is np.ndarray or list:
-        print("input file is array or list")
+    if not type(input_sentences) is np.ndarray or list:
+        print("input file must be array or list")
         for sentence in input_sentences:
             line = tokenization.convert_to_unicode(sentence).strip()
             examples.append(InputExample(unique_id=unique_id, text_a=line, text_b=None))
             unique_id += 1
-        return examples, total_sents
+        return examples
 
 
-def sentence_transformer(bert_directory, premises, hypothesis, feature_type):
+def contextualized_feature_transformer(bert_directory, premises, hypothesis, max_length):
     tf.logging.set_verbosity(tf.logging.INFO)
 
-    sents = premises + hypothesis
+    total_sentences = premises + hypothesis
     layer_indexes = [int(x) for x in args.layers.split(",")]
 
     bert_config = modeling.BertConfig.from_json_file(bert_directory + "bert_config.json")
@@ -321,11 +384,11 @@ def sentence_transformer(bert_directory, premises, hypothesis, feature_type):
             num_shards=args.num_tpu_cores,
             per_host_input_for_training=is_per_host))
 
-    examples, total_sent_count = read_examples(sents)
+    examples, total_sent_count = read_examples(total_sentences)
 
     # This is the data which we'll need to export for word based level.
     features = convert_examples_to_features(
-        examples=examples, seq_length=args.max_seq_length, tokenizer=tokenizer)
+        examples=examples, seq_length=max_length, tokenizer=tokenizer)
 
     unique_id_to_feature = {}
     for feature in features:
@@ -356,53 +419,179 @@ def sentence_transformer(bert_directory, premises, hypothesis, feature_type):
     for result in estimator.predict(input_fn, yield_single_examples=True):
         unique_id = int(result["unique_id"])
         feature = unique_id_to_feature[unique_id]
+        tokens_weights = []
         for (i, token) in enumerate(feature.tokens):
+            all_layers = []
             for (j, layer_index) in enumerate(layer_indexes):
                 layer_output = result["layer_output_%d" % j]
                 layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
-                sentence_vectors.append(layers_output_flat)
-            # print("Token budur = kontrolden sonra sil bu satırı = ", token)
-            break
+                all_layers.append(layers_output_flat)
+            tokens_weights.append(sum(all_layers)[:4])
+        sentence_vectors.append(np.mean(tokens_weights, axis=0))
 
         processed_sent_count = processed_sent_count + 1
-        if processed_sent_count % 5000 == 0:
-            print("processed Sentence: " + str(processed_sent_count) + " Processed Percentage: " +
-                  str(round(processed_sent_count / len(sents), 4) * 100))
+        if processed_sent_count % 50000 == 0:
+            print("Processed sentence: ", str(processed_sent_count),
+                  "Processed percent: ", str(round(processed_sent_count / total_sent_count, 4) * 100))
 
     print("Pre Processing using Bert prediction based sentence encoder is finished. Vectors are now being saved")
     return [np.array(sentence_vectors[: len(premises)]), np.array(sentence_vectors[len(premises):])]
 
 
-def bert_transformer(path, train_loc, dev_loc, feature_type):
+def bert_sentence_transformer(transformer_path, transformer_type, train_loc, dev_loc,
+                              max_length, processed_path):
     print("Pre - Processing sentences using prediction based bert_dependencies sentence approach")
 
     train_texts1, train_texts2, train_labels = read_snli(train_loc)
     dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
 
-    if not os.path.isdir(path + "Processed_SNLI"):
+    if not os.path.isdir(processed_path):
         print("Processed_SNLI directory is not exist, now created")
-        os.mkdir(path + "Processed_SNLI")
+        os.mkdir(processed_path)
 
-    if os.path.isfile(path=path + "Processed_SNLI/" + feature_type + "/dev_x.pkl"):
-        print("Pre-Processed dev file is found now loading")
-        with open(path + "Processed_SNLI/" + feature_type + "/dev_x.pkl", "rb") as f:
+    if os.path.isfile(path=processed_path + "dev_x.pkl"):
+        print("Pre-Processed dev file is found, now loading")
+        with open(processed_path + "dev_x.pkl", "rb") as f:
             dev_x = pickle.load(f)
     else:
         print("There is no pre-processed file of dev_X, Pre-Process will start now")
-        dev_x = sentence_transformer(bert_directory=path + "transformers/bert/", premises=dev_texts1,
-                                     hypothesis=dev_texts2, feature_type=feature_type)
-        with open(path + "Processed_SNLI/" + feature_type + "/dev_x.pkl", "wb") as f:
+        dev_x = contextualized_feature_transformer(bert_directory=transformer_path[transformer_type],
+                                                   premises=dev_texts1, hypothesis=dev_texts2, max_length=max_length)
+        with open(processed_path + "dev_x.pkl", "wb") as f:
             pickle.dump(dev_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    if os.path.isfile(path=path + "Processed_SNLI/" + feature_type + "/train_x.pkl"):
+    if os.path.isfile(processed_path + "train_x.pkl"):
         print("Pre-Processed train file is found now loading")
-        with open(path + "Processed_SNLI/" + feature_type + "/train_x.pkl", "rb") as f:
+        with open(processed_path + "train_x.pkl", "rb") as f:
             train_x = pickle.load(f)
     else:
         print("There is no pre-processed file of train_X, Pre-Process will start now")
-        train_x = sentence_transformer(bert_directory=path + "transformers/bert/", premises=train_texts1,
-                                       hypothesis=train_texts2, feature_type=feature_type)
-        with open(path + "Processed_SNLI/" + feature_type + "/train_x.pkl", "wb") as f:
+        train_x = contextualized_feature_transformer(bert_directory=transformer_path[transformer_type],
+                                                     premises=train_texts1, hypothesis=train_texts2,
+                                                     max_length=max_length)
+        with open(processed_path + "train_x.pkl", "wb") as f:
             pickle.dump(train_x, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     return train_x, train_labels, dev_x, dev_labels
+
+
+def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
+                nr_hidden, nr_class, learning_rate, embedding_type, early_stopping,
+                train_x, train_labels, dev_x, dev_labels, vectors, result_path):
+    """
+    Model will be trained in this function. Currently it supports ESIM and Decomposable Attention models.
+    :param model_save_path: path where the model will be saved as h5 file.
+    :param model_type: type of the model. either ESIM or Decomposable attention.
+    :param max_length: max length of the sentence / sequence.
+    :param batch_size: Size of the train data will be feed forwarded on each iteration.
+    :param nr_epoch: total number of times the model iterates trough all the training data.
+    :param nr_hidden: Hidden neuron size of the model
+    :param nr_class: number of classed that model will classify into. Also the last layer of the model.
+    :param learning_rate: constant rate that will be used on each back propagation.
+    :param embedding_type: definition of the embeddings for the model. For word embedding based model, 'word' keyword,
+    for sentence based model 'sentence' should be selected.
+    :param early_stopping: parameter that stops the training when the validation accuracy cant go higher.
+    :param train_x: training data.
+    :param train_labels: training labels.
+    :param dev_x: developer data
+    :param dev_labels: developer labels
+    :param vectors: embedding vectors of the words.
+    :param result_path: path where accuracy and loss graphs will be saved along with the model history.
+    :return: None
+    """
+
+    model = None
+
+    if model_type == "esim":
+
+        model = esim_bilstm_model(vectors=vectors, max_length=max_length, nr_hidden=nr_hidden,
+                                  nr_class=nr_class, learning_rate=learning_rate, embedding_type=embedding_type)
+
+    elif model_type == "decomposable_attention":
+
+        model = decomposable_attention_model(vectors=vectors, max_length=max_length,
+                                             nr_hidden=nr_hidden, nr_class=nr_class,
+                                             learning_rate=learning_rate, embedding_type=embedding_type)
+
+    model.summary()
+
+    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1,
+                       patience=early_stopping, restore_best_weights=True)
+
+    history = model.fit(
+        train_x,
+        train_labels,
+        validation_data=(dev_x, dev_labels),
+        epochs=nr_epoch,
+        batch_size=batch_size,
+        verbose=1,
+        callbacks=[es]
+    )
+
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # summarize history for accuracy
+    plt.plot(history.history['accuracy'])
+    plt.plot(history.history['val_accuracy'])
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+    plt.savefig(result_path + 'accuracy.png', bbox_inches='tight')
+
+    # summarize history for loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+    plt.savefig(result_path + 'loss.png', bbox_inches='tight')
+
+    print('\n model history:', history.history)
+
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    with open(result_path + 'result_history.txt', 'w') as file:
+        file.write(str(history.history))
+
+    if not os.path.isdir(model_save_path):
+        os.mkdir(model_save_path)
+    print("Saving to", model_save_path)
+
+    model.save(model_save_path[model_type] + "model.h5")
+
+
+def main():
+    train_x, train_labels, dev_x, dev_labels = \
+        bert_sentence_transformer(transformer_path=args.transformer_path,
+                                  transformer_type=args.transformer_type,
+                                  train_loc=args.train_loc,
+                                  dev_loc=args.dev_loc,
+                                  max_length=args.max_length,
+                                  processed_path=args.processed_path)
+
+    train_model(model_save_path=args.model_save_path,
+                model_type=args.model_type,
+                max_length=args.max_length,
+                batch_size=args.batch_size,
+                nr_epoch=args.nr_epoch,
+                nr_hidden=args.nr_hidden,
+                nr_class=args.nr_class,
+                learning_rate=args.learning_rate,
+                embedding_type=args.embedding_type,
+                early_stopping=args.early_stopping,
+                train_x=train_x,
+                train_labels=train_labels,
+                dev_x=dev_x,
+                dev_labels=dev_labels,
+                vectors=None,
+                result_path=args.result_path)
+
+
+if __name__ == "__main__":
+    plac.call(main)
