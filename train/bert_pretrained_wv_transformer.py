@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 from keras.callbacks import EarlyStopping
 from models.decomposable_attention import decomposable_attention_model
 from models.esim import esim_bilstm_model
-from utils.utils import read_snli, load_configurations
+from utils.utils import read_nli, load_configurations
 from bert_dependencies import tokenization
 
 configs = load_configurations()
@@ -203,8 +203,8 @@ def bert_pretrained_transformer(transformer_path, transformer_type, train_loc, d
     :return: returns train - dev set and corresponding labels with word weights.
     """
     print("starting to pre-process using bert-initial word embeddings.")
-    train_texts1, train_texts2, train_labels = read_snli(train_loc)
-    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+    train_texts1, train_texts2, train_labels = read_nli(train_loc)
+    dev_texts1, dev_texts2, dev_labels = read_nli(dev_loc)
 
     if not os.path.isdir(processed_path):
         print("Processed_SNLI directory is not exist, now created")

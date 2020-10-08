@@ -30,7 +30,7 @@ from keras.callbacks import EarlyStopping
 from bert_dependencies import modeling, tokenization
 from models.decomposable_attention import decomposable_attention_model
 from models.esim import esim_bilstm_model
-from utils.utils import read_snli, load_configurations
+from utils.utils import read_nli, load_configurations
 
 configs = load_configurations()
 
@@ -442,8 +442,8 @@ def bert_sentence_transformer(transformer_path, transformer_type, train_loc, dev
                               max_length, processed_path):
     print("Pre - Processing sentences using prediction based bert_dependencies sentence approach")
 
-    train_texts1, train_texts2, train_labels = read_snli(train_loc)
-    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+    train_texts1, train_texts2, train_labels = read_nli(train_loc)
+    dev_texts1, dev_texts2, dev_labels = read_nli(dev_loc)
 
     if not os.path.isdir(processed_path):
         print("Processed_SNLI directory is not exist, now created")

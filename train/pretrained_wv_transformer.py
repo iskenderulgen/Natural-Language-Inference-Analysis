@@ -13,7 +13,7 @@ import plac
 import matplotlib.pyplot as plt
 
 from keras.callbacks import EarlyStopping
-from utils.utils import read_snli, load_spacy_nlp, load_configurations
+from utils.utils import read_nli, load_spacy_nlp, load_configurations
 from models.esim import esim_bilstm_model
 from models.decomposable_attention import decomposable_attention_model
 
@@ -184,8 +184,8 @@ def spacy_word_transformer(transformer_path, transformer_type, train_loc, dev_lo
 
     nlp = load_spacy_nlp(transformer_path=transformer_path, transformer_type=transformer_type)
 
-    train_texts1, train_texts2, train_labels = read_snli(train_loc)
-    dev_texts1, dev_texts2, dev_labels = read_snli(dev_loc)
+    train_texts1, train_texts2, train_labels = read_nli(train_loc)
+    dev_texts1, dev_texts2, dev_labels = read_nli(dev_loc)
 
     if not os.path.isdir(processed_path):
         print("Processed_nli directory is not exist, it's now created")
