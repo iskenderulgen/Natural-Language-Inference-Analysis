@@ -50,7 +50,7 @@ parser.add_argument("--use_one_hot_embeddings", type=bool, default=False,
                          "since it is much faster.")
 
 parser.add_argument("--transformer_type", type=str, default="bert",
-                    help="type of the transformer which will convert texts to vectors. This script only for bert,"
+                    help="Type of the transformer which will convert texts to vectors. This script only for bert,"
                          "so default transformer type remains 'bert'.")
 
 parser.add_argument("--embedding_type", type=str, default="sentence",
@@ -64,7 +64,7 @@ parser.add_argument("--model_type", type=str, default="decomposable_attention",
 
 parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
                     help="transformer model path which will convert the text in to word-ids and vectors. "
-                         "Transformer path has four sub paths. Required path will be selected by transformer_type.")
+                         "Transformer path has four sub paths. transformer_type will load the desired nlp object.")
 
 parser.add_argument("--train_loc", type=str, default=configs["nli_set_train"],
                     help="Train data location which will be processed via transformers and saved to 'processed_path'"
@@ -560,7 +560,7 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
         os.mkdir(model_save_path)
     print("Saving trained model to", model_save_path)
 
-    model.save(model_save_path[model_type] + "/model.h5")
+    model.save(model_save_path[model_type] + "model.h5")
 
 
 def main():

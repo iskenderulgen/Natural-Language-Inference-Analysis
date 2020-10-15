@@ -22,7 +22,7 @@ configs = load_configurations()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--transformer_type", type=str, default="glove",
-                    help="type of the transformer which will convert texts in to word-ids. Currently three types "
+                    help="Type of the transformer which will convert texts in to word-ids. Currently three types "
                          "are supported.Here the types as follows 'glove' -  'fasttext' - 'word2vec'."
                          "Pick one you'd like to transform into")
 
@@ -37,20 +37,20 @@ parser.add_argument("--model_type", type=str, default="esim",
                          "for decomposable attention model type 'decomposable_attention'. ")
 
 parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
-                    help="main transformer model path which will convert the text in to word-ids and vectors. "
+                    help="Main transformer model path which will convert the text in to word-ids and vectors. "
                          "transformer path has four sub paths, load_nlp module will carry out the sub model paths"
-                         "based on transformer type selection")
+                         "based on transformer_type selection")
 
 parser.add_argument("--train_loc", type=str, default=configs["nli_set_train"],
                     help="Train data location which will be processed via transformers and be saved to processed_path "
                          "location")
 
 parser.add_argument("--dev_loc", type=str, default=configs["nli_set_dev"],
-                    help="Train data dev location which will be used to measure train accuracy while training model,"
-                         "files will be processed using transformer and be saved to processed path")
+                    help="Train dev data location which will be used to measure train accuracy while training model,"
+                         "files will be processed using transformer and saved to processed path")
 
 parser.add_argument("--max_length", type=str, default=configs["max_length"],
-                    help="max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
+                    help="Max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
                          "padded. Remember longer sentences means longer sequences to train. Select best length based"
                          "on your rig.")
 
@@ -59,27 +59,27 @@ parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
                          "length.Nr unknown vectors will be created using random module")
 
 parser.add_argument("--processed_path", type=str, default=configs["processed_nli"],
-                    help="Path where the transformed texts will be saved to as word-ids. Will be used for embedding"
-                         "layer of the train models.")
+                    help="Path where the transformed texts will be saved to as word-ids. Word-id matrix will be used"
+                         "in embedding layer as a look-up table.")
 
 parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
                     help="The path where trained NLI model will be saved.")
 
 parser.add_argument("--batch_size", type=int, default=configs["batch_size"],
-                    help="batch size of model, it represents the amount of data the model will train for each pass.")
+                    help="Batch size of model, it represents the amount of data the model will train for each pass.")
 
 parser.add_argument("--nr_epoch", type=int, default=configs["nr_epoch"],
                     help="Total number of times that model will iterate trough the data.")
 
 parser.add_argument("--nr_hidden", type=int, default=configs["nr_hidden"],
-                    help="hidden neuron size of the model")
+                    help="Hidden neuron size of the model")
 
 parser.add_argument("--nr_class", type=int, default=configs["nr_class"],
-                    help="number of class that will model classify the data into. Also represents the last layer of"
+                    help="Number of class that will model classify the data into. Also represents the last layer of"
                          "the model.")
 
 parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"],
-                    help="learning rate parameter that represent the constant which will be multiplied with the data"
+                    help="Learning rate parameter that represent the constant which will be multiplied with the data"
                          "in each back propagation")
 
 parser.add_argument("--result_path", type=str, default=configs["results"],
@@ -191,7 +191,7 @@ def spacy_word_transformer(transformer_path, transformer_type, train_loc, dev_lo
         print("Processed_nli directory is not exist, it's now created")
         os.mkdir(processed_path)
 
-    if os.path.isfile(path=processed_path + "/train_x.pkl"):
+    if os.path.isfile(path=processed_path + "train_x.pkl"):
         print(transformer_type, "based Pre-Processed train file is found now loading...")
         with open(processed_path + "train_x.pkl", "rb") as f:
             train_x = pickle.load(f)
@@ -202,7 +202,7 @@ def spacy_word_transformer(transformer_path, transformer_type, train_loc, dev_lo
         with open(processed_path + "train_x.pkl", "wb") as f:
             pickle.dump(train_x, f)
 
-    if os.path.isfile(path=processed_path + "/dev_x.pkl"):
+    if os.path.isfile(path=processed_path + "dev_x.pkl"):
         print(transformer_type, "based pre processed dev file is found, now loading...")
         with open(processed_path + "dev_x.pkl", "rb") as f:
             dev_x = pickle.load(f)
@@ -234,7 +234,7 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     :param model_save_path: path where the model will be saved as h5 file.
     :param model_type: type of the model. either ESIM or Decomposable attention.
     :param max_length: max length of the sentence / sequence.
-    :param batch_size: Size of the train data will be feed forwarded on each iteration.
+    :param batch_size: size of the train data will be feed forwarded on each iteration.
     :param nr_epoch: total number of times the model iterates trough all the training data.
     :param nr_hidden: Hidden neuron size of the model
     :param nr_class: number of classed that model will classify into. Also the last layer of the model.

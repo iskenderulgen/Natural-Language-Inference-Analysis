@@ -42,59 +42,58 @@ configs = load_configurations()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--transformer_type", type=str, default="bert",
-                    help="type of the transformer which will convert texts in to word-ids. This script only for bert,"
-                         "so default transformer type remains 'bert'")
+                    help="Type of the transformer which will convert texts in to word-ids. This script only for bert,"
+                         "so default transformer type remains 'bert'.")
 
 parser.add_argument("--embedding_type", type=str, default="word",
                     help="For word embedding base models use 'word' keyword,"
                          "For sentence embedding base models use 'sentence' keyword. "
-                         "Required embedding layer will be triggered based on selection")
+                         "Required embedding layer will be triggered based on selection.")
 
 parser.add_argument("--model_type", type=str, default="esim",
                     help="Type of the model that will be trained. "
                          "for ESIM model type 'esim' "
-                         "for decomposable attention model type 'decomposable_attention'. ")
+                         "for decomposable attention model type 'decomposable_attention'.")
 
 parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
-                    help="main transformer model path which will convert the text in to word-ids and vectors. "
-                         "transformer path has four sub paths, load_nlp module will carry out the sub model paths"
-                         "based on transformer type selection")
+                    help="Main transformer model path which will convert the text in to word-ids and vectors. "
+                         "transformer path has four sub paths, transformer_type will load the desired nlp object.")
 
 parser.add_argument("--train_loc", type=str, default=configs["nli_set_train"],
-                    help="Train data location which will be processed via transformers and be saved to processed_path "
-                         "location")
+                    help="Train data location which will be processed via transformers and saved to processed_path "
+                         "location.")
 
 parser.add_argument("--dev_loc", type=str, default=configs["nli_set_dev"],
-                    help="Train data dev location which will be used to measure train accuracy while training model,"
-                         "files will be processed using transformer and be saved to processed path")
+                    help="Train dev data location which will be used to measure train accuracy while training model,"
+                         "files will be processed using transformer and saved to processed path.")
 
 parser.add_argument("--max_length", type=str, default=configs["max_length"],
-                    help="max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
+                    help="Max length of the sentences, longer sentences will be pruned and shorter ones will be zero"
                          "padded. Remember longer sentences means longer sequences to train. Select best length based"
                          "on your rig.")
 
 parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
-                    help="number of unknown vectors which will be used for padding the short sentences to desired"
-                         "length.Nr unknown vectors will be created using random module")
+                    help="Number of unknown vectors which will be used for padding the short sentences to desired"
+                         "length. Nr unknown vectors will be created using random module.")
 
 parser.add_argument("--processed_path", type=str, default=configs["processed_nli"],
-                    help="Path where the transformed texts will be saved to as word-ids. Will be used for embedding"
-                         "layer of the train models.")
+                    help="Path where the transformed texts will be saved to as word-ids. Word-id matrix will be used"
+                         "in embedding layer as a look-up table.")
 
 parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
                     help="The path where trained NLI model will be saved.")
 
 parser.add_argument("--batch_size", type=int, default=configs["batch_size"],
-                    help="batch size of model, it represents the amount of data the model will train for each pass.")
+                    help="Batch size of model, it represents the amount of data the model will train for each pass.")
 
 parser.add_argument("--nr_epoch", type=int, default=configs["nr_epoch"],
                     help="Total number of times that model will iterate trough the data.")
 
 parser.add_argument("--nr_hidden", type=int, default=configs["nr_hidden"],
-                    help="hidden neuron size of the model")
+                    help="Hidden neuron size of the model")
 
 parser.add_argument("--nr_class", type=int, default=configs["nr_class"],
-                    help="number of class that will model classify the data into. Also represents the last layer of"
+                    help="Number of class that will model classify the data into. Also represents the last layer of"
                          "the model.")
 
 parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"],
@@ -108,8 +107,8 @@ args = parser.parse_args()
 
 def convert_examples_to_features(premises, hypothesis, seq_length, bert_directory):
     """
-    This function used bert transformer to create word ids of tokens. This process is similar to pre trained word
-    weight transformation, uses the bert initial pretrained word weights to create vectors. Compared to priors bert
+    This function uses bert transformer to create word ids of tokens. This process is similar to pre trained word
+    weight transformation, uses the bert initial pretrained word weights to create vectors. Compared to priors, bert
     pretrained initial word weights are much smaller than old pretrained vectors thanks to bert's full word tokenizer.
     :param premises: opinion sentence
     :param hypothesis: opinion sentence
@@ -258,9 +257,9 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     :param model_save_path: path where the model will be saved as h5 file.
     :param model_type: type of the model. either ESIM or Decomposable attention.
     :param max_length: max length of the sentence / sequence.
-    :param batch_size: Size of the train data will be feed forwarded on each iteration.
+    :param batch_size: size of the train data will be feed forwarded on each iteration.
     :param nr_epoch: total number of times the model iterates trough all the training data.
-    :param nr_hidden: Hidden neuron size of the model
+    :param nr_hidden: hidden neuron size of the model
     :param nr_class: number of classed that model will classify into. Also the last layer of the model.
     :param learning_rate: constant rate that will be used on each back propagation.
     :param embedding_type: definition of the embeddings for the model. For word embedding based model, 'word' keyword,
