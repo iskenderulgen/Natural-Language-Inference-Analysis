@@ -9,7 +9,8 @@ import tensorflow as tf
 
 from keras import Model
 from keras.models import load_model
-from utils.utils import read_nli, load_spacy_nlp, attention_visualization, load_configurations, xml_test_file_reader
+from utils.utils import read_nli, load_spacy_nlp, attention_visualization, load_configurations, xml_test_file_reader, \
+    predictions_to_html
 
 try:
     import cPickle as pickle
@@ -23,6 +24,12 @@ parser.add_argument("--mode", type=str, default="evaluate",
                          "operation takes labeled test data and measures the accuracy of the model. Demo operation"
                          "is for comparing unlabeled data. Demo support two individual sentences or list of sentences"
                          "as input data.")
+
+parser.add_argument("--nli_type", type=str, default="snli",
+                    help="This parameter defines the train data which the model trained on. By specifying this"
+                         "one can see the model behaviour based on trained data on prediction time. There are 4 main "
+                         "nli dataset 'snli', 'mnli', 'anli', 'fewer'. One can combine each of these according to"
+                         "their needs. Specify this by hand based on the model you will use on prediction time")
 
 parser.add_argument("--transformer_type", type=str, default="glove",
                     help="Type of the transformer which will convert texts in to word-ids. Currently three types "
@@ -40,7 +47,7 @@ parser.add_argument("--max_length", type=str, default=configs["max_length"],
                          "on your rig.")
 
 parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
-                    help="The path where trained NLI model will be saved.")
+                    help="The path where trained NLI model is saved.")
 
 parser.add_argument("--model_type", type=str, default="esim",
                     help="Type of the model that will be trained. "
@@ -48,7 +55,7 @@ parser.add_argument("--model_type", type=str, default="esim",
                          "for decomposable attention model type 'decomposable_attention'. ")
 
 parser.add_argument("--result_path", type=str, default=configs["results"],
-                    help="path of the file where trained model loss and accuracy graphs will be saved.")
+                    help="path of the file where results and graphs will be saved.")
 
 parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
                     help="number of unknown vectors which will be used for padding the short sentences to desired"
@@ -56,7 +63,13 @@ parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
 
 parser.add_argument("--test_loc", type=str, default=configs["nli_set_test"],
                     help="Test data location which will be used to measure the evaluation accuracy,")
+
+parser.add_argument("--visualization", type=bool, default=False,
+                    help="shows attention heatmaps between two opinion sentences, best used with single"
+                         "premise- hypothesis opinion sentences.")
 args = parser.parse_args()
+
+entailment_types = ["entailment", "contradiction", "neutral"]
 
 
 def get_word_ids(docs, max_length=100, nr_unk=100):
@@ -108,9 +121,11 @@ class SpacyPrediction(object):
         x1 = self.get_features([doc1], max_length=self.max_length)
         x2 = self.get_features([doc2], max_length=self.max_length)
         outputs = self.model.predict([x1, x2])
-        scores = outputs[0]
 
-        return self.entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2]
+        # scores = outputs[0]
+        # return self.entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2]
+
+        return outputs
 
 
 def evaluate(dev_loc, max_length, transformer_path, transformer_type, model_path, model_type):
@@ -127,35 +142,40 @@ def evaluate(dev_loc, max_length, transformer_path, transformer_type, model_path
 
     disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
 
-    dev_texts1, dev_texts2, dev_labels = read_nli(dev_loc)
+    premise, hypothesis, dev_labels = read_nli(dev_loc)
     nlp = load_spacy_nlp(transformer_path=transformer_path, transformer_type=transformer_type)
     nlp.add_pipe(SpacyPrediction.load(path=model_path[model_type] + "model.h5", max_length=max_length))
+
     total = 0.0
     true_p = 0.0
-    for text1, text2, label in zip(dev_texts1, dev_texts2, dev_labels):
+
+    for text1, text2, label in zip(premise, hypothesis, dev_labels):
         doc1 = nlp(text1, disable=disabled_pipelines)
         doc2 = nlp(text2, disable=disabled_pipelines)
-        y_prediction, _, _, _ = doc1.similarity(doc2)
-        if y_prediction == SpacyPrediction.entailment_types[label.argmax()]:
+
+        outputs = doc1.similarity(doc2)
+        scores = outputs[0]
+        if entailment_types[scores.argmax()] == SpacyPrediction.entailment_types[label.argmax()]:
             true_p += 1
         total += 1
     print("Entailment Model Accuracy is", true_p / total)
 
 
-def demo(max_length, transformer_path, transformer_type, model_path, model_type, premise,
-         hypothesis, visualization, results_path):
+def demo(premise, hypothesis, transformer_path, transformer_type, model_path, model_type,
+         max_length, attention_map, result_path, nli_type):
     """
     Performs demo operation using trained NLI model. Either takes two strings or list of strings and compares the
     premise - hypothesis pairwise and returns the NLI result.
-    :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
+    :param premise: opinion sentence
+    :param hypothesis: opinion sentence
     :param transformer_path: path of the transformer nlp object.
     :param transformer_type: type of the transformer glove - fasttext or word2vec.
     :param model_path: path where the model is saved as h5 file.
     :param model_type: type of the model. either ESIM or Decomposable attention.
-    :param premise: opinion sentence
-    :param hypothesis: opinion sentence
-    :param visualization: Boolean value to show attention heatmap of string based comparison.
-    :param results_path: path of the file where the results will be saved.
+    :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
+    :param attention_map: boolean value to show attention heatmap of string based comparison.
+    :param result_path: path of the file where the results will be saved.
+    :param nli_type: type of the nli set which the model trained on.
     :return: None
     """
 
@@ -171,10 +191,11 @@ def demo(max_length, transformer_path, transformer_type, model_path, model_type,
         print("premise:", doc1)
         print("hypothesis   :", doc2)
 
-        entailment_type, confidence, attention1, attention2 = doc1.similarity(doc2)
-        print("Entailment type:", entailment_type, "(Confidence:", confidence, ")")
+        outputs = doc1.similarity(doc2)
+        scores = outputs[0]
+        print("Entailment type is:", entailment_types[scores.argmax()], "\nEntailment confidence is: ", scores.max())
 
-        if visualization:
+        if attention_map:
             def get_attended_tokens(doc):
                 words = []
                 for token in doc:
@@ -186,38 +207,66 @@ def demo(max_length, transformer_path, transformer_type, model_path, model_type,
 
             attention_visualization(tokens1=tokens1,
                                     tokens2=tokens2,
-                                    attention1=attention1,
-                                    attention2=attention2,
-                                    results_path=results_path,
+                                    attention1=outputs[1],
+                                    attention2=outputs[2],
+                                    results_path=result_path,
                                     transformer_type=transformer_type)
 
     elif type(premise) and type(hypothesis) is list:
         a = min(len(premise), len(hypothesis))
         premises = premise[:a]
-        hypothesis = hypothesis[:a]
+        hypothesises = hypothesis[:a]
+
+        prediction_type = []
+        contradiction_score = []
+        neutral_score = []
+        entailment_score = []
 
         total = 0.0
-        contradict = 0.0
+        contradiction = 0.0
         entailment = 0.0
         neutral = 0.0
-        for text1, text2 in zip(premises, hypothesis):
+
+        for text1, text2 in zip(premises, hypothesises):
             doc1 = nlp(text1, disable=disabled_pipelines)
             doc2 = nlp(text2, disable=disabled_pipelines)
-            y_prediction, _, _, _ = doc1.similarity(doc2)
-            if y_prediction is 'contradiction':
-                contradict += 1
-            elif y_prediction is 'entailment':
+
+            outputs = doc1.similarity(doc2)
+            prediction = entailment_types[outputs[0].argmax()]
+
+            prediction_type.append(prediction)
+            contradiction_score.append(outputs[0][0][1])
+            neutral_score.append(outputs[0][0][2])
+            entailment_score.append(outputs[0][0][0])
+
+            if prediction is 'contradiction':
+                contradiction += 1
+            elif prediction is 'entailment':
                 entailment += 1
-            elif y_prediction is 'neutral':
+            elif prediction is 'neutral':
                 neutral += 1
             total += 1
-        print("total contradiction = ", contradict / total)
+        print("total contradiction = ", contradiction / total)
         print("total entailment =", entailment / total)
         print("total neutral =", neutral / total)
 
+        prediction_type.append(total)
+        contradiction_score.append(contradiction)
+        neutral_score.append(neutral)
+        entailment_score.append(entailment)
+
+        predictions_to_html(nli_type=nli_type,
+                            premises=premises,
+                            hypothesises=hypothesises,
+                            prediction=prediction_type,
+                            contradiction_score=contradiction_score,
+                            neutral_score=neutral_score,
+                            entailment_score=entailment_score,
+                            result_path=result_path
+                            )
+
 
 def main():
-
     if args.mode == "evaluate":
         evaluate(dev_loc=args.test_loc,
                  max_length=args.max_length,
@@ -240,8 +289,9 @@ def main():
              model_type=args.model_type,
              premise=premise,
              hypothesis=hypothesis,
-             visualization=args.visualization,
-             results_path=args.results_path)
+             attention_map=args.visualization,
+             result_path=args.result_path,
+             nli_type=args.nli_type)
 
 
 if __name__ == "__main__":
