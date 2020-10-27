@@ -35,7 +35,7 @@ def set_keras_backend(backend):
     if backend == "tensorflow":
         K.get_session().close()
         cfg = K.tf.ConfigProto()
-        # cfg.gpu_options.per_process_memory_fraction = 0.8
+        cfg.gpu_options.per_process_memory_fraction = 0.8
         cfg.gpu_options.allow_growth = True
         K.set_session(K.tf.Session(config=cfg))
         K.clear_session()
@@ -74,6 +74,7 @@ def read_nli(path):
             texts1.append(nli_data["sentence1"])
             texts2.append(nli_data["sentence2"])
             labels.append(LABELS[label])
+    print("NLI dataset loaded")
     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
 
@@ -145,11 +146,31 @@ def attention_visualization(tokens1, tokens2, attention1, attention2, results_pa
     plt.yticks(rotation=0)
     ax.set_xticklabels([j for j in tokens2])
     plt.xticks(rotation=90)
-    plt.title("attention visualized with", transformer_type)
+    plt.title("attention visualized with " + transformer_type)
     fig1 = plt.gcf()
     plt.show()
     plt.draw()
     fig1.savefig(results_path + 'attention_graph.png')
+
+
+def predictions_to_html(nli_type, premises, hypothesises, prediction, contradiction_score, neutral_score,
+                        entailment_score, result_path):
+
+    premises.append("### last prediction result corresponds total amount of data. ###")
+    hypothesises.append("### last row corresponds to total amount of each type of predicted label. ###")
+
+    predictions_df = pd.DataFrame(
+        data={'premises': premises,
+              'hypothesises': hypothesises,
+              nli_type + ' prediction': prediction,
+              nli_type + ' contradiction score': contradiction_score,
+              nli_type + ' neutral score': neutral_score,
+              nli_type + ' entailment score': entailment_score}
+    )
+    html = predictions_df.to_html(float_format=lambda x: '%.3f' % x)
+    text_file = open(result_path + nli_type + ".html", "w")
+    text_file.write(html)
+    text_file.close()
 
 
 def xml_test_file_reader(path):
@@ -255,7 +276,7 @@ def merge_snli_style_sets(nli_set_path, nli_definition):
     Merges all nli set that found in the path. Beware, all the sets must be converted to snli format before merging.
     Function reads all data sequentially and merges them, saves as snli format. This approach usually used to see
     the model behaviour when trained on all nli sets.
-    :param nli_set_path: folder path of the nli sets. 
+    :param nli_set_path: folder path of the nli sets.
     :param nli_definition: train - test - dev definition of the nli data. saves the merged set based on this definer.
     :return: None
     """

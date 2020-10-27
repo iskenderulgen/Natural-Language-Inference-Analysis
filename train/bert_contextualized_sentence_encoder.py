@@ -354,8 +354,9 @@ def read_examples(input_sentences):
     examples = []
     unique_id = 0
 
-    if not type(input_sentences) is np.ndarray or list:
+    if not type(input_sentences) is list:
         print("input file must be array or list")
+    else:
         for sentence in input_sentences:
             line = tokenization.convert_to_unicode(sentence).strip()
             examples.append(InputExample(unique_id=unique_id, text_a=line, text_b=None))

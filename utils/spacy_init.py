@@ -52,7 +52,7 @@ def init_model(
         vectors_loc='/home/ulgen/Downloads/crawl-300d-2M.vec.zip',
         prune_vectors=685000,
         vectors_name=None,
-        model_name='word2vec',
+        model_name='fasttext',
 ):
     """
     Create a new model from raw data, like word frequencies, Brown clusters

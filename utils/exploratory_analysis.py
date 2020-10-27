@@ -51,8 +51,8 @@ def get_vectors_and_sims(sentence_pairs, label_def):
     premises = sentence_pairs['sentence1'].to_numpy()
     hypothesis = sentence_pairs['sentence2'].to_numpy()
 
-    sentence_vectors = bert_contextualized_sentence_encoder.sentence_transformer(bert_directory=args.bert_directory, premises=premises,
-                                                                                 hypothesis=hypothesis, feature_type="bert_sentence")
+    sentence_vectors = bert_contextualized_sentence_encoder.contextualized_feature_transformer(bert_directory=args.bert_directory, premises=premises,
+                                                                                               hypothesis=hypothesis, feature_type="bert_sentence")
 
     premises_vectors = sentence_vectors[0]
     hypothesis_vectors = sentence_vectors[1]
@@ -102,3 +102,20 @@ def plotting(data_dir, data_type):
 if __name__ == "__main__":
     # data_splitter(main_path=path, dataset=args.dataset)
     plotting(data_dir=path, data_type=args.data_type)
+
+
+
+"""Pandas numpy transformation."""
+df = pd.read_json(path+'Processed_SNLI/train/neutral.json')['sentence1_vectors'].to_numpy()
+print(type(df))
+
+
+"""array to pandas data frame example."""
+arr = [[0.106217, 0.377535, -0.598523, -0.18559, 0.448664], [0.248715, 0.784982, -0.344282, -0.393607, -0.148429]]
+arr2 = [[0.106217, 0.377535, -0.598523, -0.18559, 0.448664], [0.248715, 0.784982, -0.344282, -0.393607, -0.148429]]
+df1 = pd.DataFrame(data={'A': arr})
+df1.insert(loc=1, column='_similarity', value=pd.DataFrame(data={'A': arr2}), allow_duplicates=True)
+
+"""pandas write dataframe to json"""
+df1.to_json(path + "aaa.json", orient='records')
+x = pd.read_json(path_or_buf=path + "aaa.json", orient='records')

@@ -128,7 +128,7 @@ def convert_examples_to_features(premises, hypothesis, seq_length, bert_director
     tokenizer = tokenization.FullTokenizer(
         vocab_file=bert_directory + "vocab.txt", do_lower_case=args.do_lower_case)
 
-    for (ex_index, example) in enumerate(sentences):
+    for example in sentences:
         line = tokenization.convert_to_unicode(example).strip()
         tokens = tokenizer.tokenize(line)
 

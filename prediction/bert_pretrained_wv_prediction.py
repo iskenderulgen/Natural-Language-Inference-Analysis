@@ -257,8 +257,11 @@ def main():
 
         path = "/media/ulgen/Samsung/contradiction_data_depo/results/a/data/UKPConvArg1Strict-XML/"
 
-        premise, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_atheism.xml")
-        hypothesis, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_christianity.xml")
+        # premise, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_atheism.xml")
+        # hypothesis, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_christianity.xml")
+
+        premise = "If God doesn't exist, how come there are loads of predictions, sent by God, written thousands of years before Jesus saying exactly what happened to Jesus?"
+        hypothesis = "Neither. Agnostic is the true answer. People can believe there is a God or they can believe there isn't- but they can never know. I personally believe there isn't a God but I can never prove this definitely."
 
         demo(max_length=args.max_length,
              transformer_path=args.transformer_path,
