@@ -155,13 +155,25 @@ def attention_visualization(tokens1, tokens2, attention1, attention2, results_pa
 
 def predictions_to_html(nli_type, premises, hypothesises, prediction, contradiction_score, neutral_score,
                         entailment_score, result_path):
-
+    """
+    Writes prediction results to html file as table. This method provides easy to see approach for test results.
+    Takes premise - hypothesis and their prediction label along with scores for each label.
+    :param nli_type: Definition of the NLI train set which the model trained on.
+    :param premises: opinion sentence
+    :param hypothesises: opinion sentence
+    :param prediction: predicted label of the given premise and hypothesis sentences.
+    :param contradiction_score: contradiction score of the predicted label.
+    :param neutral_score: neutral score of the predicted label.
+    :param entailment_score: entailment score of the predicted label.
+    :param result_path: path where the html file will be saved.
+    :return: None.
+    """
     premises.append("### last prediction result corresponds total amount of data. ###")
     hypothesises.append("### last row corresponds to total amount of each type of predicted label. ###")
 
     predictions_df = pd.DataFrame(
-        data={'premises': premises,
-              'hypothesises': hypothesises,
+        data={'premise': premises,
+              'hypothesis': hypothesises,
               nli_type + ' prediction': prediction,
               nli_type + ' contradiction score': contradiction_score,
               nli_type + ' neutral score': neutral_score,
@@ -169,6 +181,87 @@ def predictions_to_html(nli_type, premises, hypothesises, prediction, contradict
     )
     html = predictions_df.to_html(float_format=lambda x: '%.3f' % x)
     text_file = open(result_path + nli_type + ".html", "w")
+    text_file.write(html)
+    text_file.close()
+
+
+def find_differences(html_results_main_path, df1_set_definer, df2_set_definer, df3_set_definer):
+    """
+    This function is hard coded and doesn't provide any modular structure. This function will be reworked to provide
+    comparison regardless of the dataframe size. Right now this function provides result only for three different
+    result files.
+    :param html_results_main_path: main path of the html results that will be compared.
+    :param df1_set_definer: train set definition of the model that predicted the results.
+    :param df2_set_definer: train set definition of the model that predicted the results.
+    :param df3_set_definer: train set definition of the model that predicted the results.
+    :return: None
+    """
+    df1 = pd.read_html(html_results_main_path + "/" + df1_set_definer + ".html")
+    df2 = pd.read_html(html_results_main_path + "/" + df2_set_definer + ".html")
+    df3 = pd.read_html(html_results_main_path + "/" + df3_set_definer + ".html")
+
+    premises = []
+    hypothesis = []
+
+    df1_prediction = []
+    df1_entailment = []
+    df1_contradiction = []
+    df1_neutral = []
+
+    df2_prediction = []
+    df2_entailment = []
+    df2_contradiction = []
+    df2_neutral = []
+
+    df3_prediction = []
+    df3_entailment = []
+    df3_contradiction = []
+    df3_neutral = []
+
+    for i in range(len(df1[0])):
+        if (str(df1[0][df1_set_definer + ' prediction'][i]) != str(df2[0][df2_set_definer + ' prediction'][i]) or
+                str(df1[0][df1_set_definer + ' prediction'][i]) != str(df3[0][df3_set_definer + ' prediction'][i]) or
+                str(df2[0][df2_set_definer + ' prediction'][i]) != str(df3[0][df3_set_definer + ' prediction'][i])):
+
+            premises.append(str(df1[0]['premise'][i]))
+            hypothesis.append(str(df1[0]['hypothesis'][i]))
+
+            df1_prediction.append(df1[0][df1_set_definer + ' prediction'][i])
+            df1_contradiction.append(df1[0][df1_set_definer + ' contradiction score'][i])
+            df1_neutral.append(df1[0][df1_set_definer + ' neutral score'][i])
+            df1_entailment.append(df1[0][df1_set_definer + ' entailment score'][i])
+
+            df2_prediction.append(df2[0][df2_set_definer + ' prediction'][i])
+            df2_contradiction.append(df2[0][df2_set_definer + ' contradiction score'][i])
+            df2_neutral.append(df2[0][df2_set_definer + ' neutral score'][i])
+            df2_entailment.append(df2[0][df2_set_definer + ' entailment score'][i])
+
+            df3_prediction.append(df3[0][df3_set_definer + ' anli prediction'][i])
+            df3_contradiction.append(df3[0][df3_set_definer + ' contradiction score'][i])
+            df3_neutral.append(df3[0][df3_set_definer + ' neutral score'][i])
+            df3_entailment.append(df3[0]['snli mnli anli entailment score'][i])
+
+    merged_df = pd.DataFrame(
+        data={'premise': premises,
+              'hypothesis': hypothesis,
+
+              df1_set_definer + ' prediction': df1_prediction,
+              df1_set_definer + ' entailment score': df1_entailment,
+              df1_set_definer + ' contradiction score': df1_contradiction,
+              df1_set_definer + ' neutral score': df1_neutral,
+
+              df2_set_definer + ' multiclass prediction': df2_prediction,
+              df2_set_definer + ' entailment score': df2_entailment,
+              df2_set_definer + ' contradiction score': df2_contradiction,
+              df2_set_definer + ' neutral score': df2_neutral,
+
+              df3_set_definer + ' multiclass prediction': df3_prediction,
+              df3_set_definer + ' entailment score': df3_entailment,
+              df3_set_definer + ' contradiction score': df3_contradiction,
+              df3_set_definer + ' neutral score': df3_neutral})
+
+    html = merged_df.to_html()
+    text_file = open(html_results_main_path + "/differences.html", "w")
     text_file.write(html)
     text_file.close()
 
