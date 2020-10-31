@@ -29,7 +29,10 @@ parser.add_argument("--nli_type", type=str, default="snli",
                     help="This parameter defines the train data which the model trained on. By specifying this"
                          "one can see the model behaviour based on trained data on prediction time. There are 4 main "
                          "nli dataset 'snli', 'mnli', 'anli', 'fewer'. One can combine each of these according to"
-                         "their needs. Specify this by hand based on the model you will use on prediction time")
+                         "their needs. Specify this by hand based on the model you will use on prediction time.If you"
+                         "combine train sets, dont use underline to define combination. Send parameter with one blank"
+                         "space. It will shorten the html cell size. For example 'snli mnli' for combination of snli "
+                         "and mnli train sets.")
 
 parser.add_argument("--transformer_type", type=str, default="glove",
                     help="Type of the transformer which will convert texts in to word-ids. Currently three types "
