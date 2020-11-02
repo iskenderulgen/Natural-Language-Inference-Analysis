@@ -137,7 +137,7 @@ def attention_visualization(tokens1, tokens2, attention1, attention2, results_pa
             attentions_scores.append(np.dot(i, j))
     attentions_scores = np.asarray(attentions_scores) / np.sum(attentions_scores)
 
-    plt.subplots(figsize=(10, 10))
+    plt.subplots(figsize=(20, 20))
 
     ax = sns.heatmap(attentions_scores.reshape((sentence1_length, sentence2_length)), linewidths=0.5, annot=False,
                      cbar=True, cmap="Blues")
