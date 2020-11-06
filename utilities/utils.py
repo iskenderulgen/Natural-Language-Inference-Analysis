@@ -3,20 +3,19 @@ import importlib
 import json
 import os
 import pickle
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import en_core_web_lg
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import plac
 import seaborn as sns
 import spacy
 import yaml
-import xml.etree.ElementTree as ET
-import pandas as pd
-
 from keras import backend as K
 from keras.utils import to_categorical
-from pathlib import Path
 
 """Pandas show non-truncated results"""
 pd.option_context('display.max_rows', None)
@@ -185,6 +184,59 @@ def predictions_to_html(nli_type, premises, hypothesises, prediction, contradict
     text_file.close()
 
 
+def merge_result_html_files(path_of_the_files):
+    """
+    This function merges the result html files and suitable for the one model architecture trained on different train
+    data. Train data can be different or combination of train sets. Merging result files give researcher the better
+    insights about how the model behaves when trained on different train sets. Eg. model architecture is ESIM and train
+    sets can be snli, snli-mnli, anli etc. Function takes premise and hypothesis as frozen index / columns and concat
+    the prediction results.
+    :param path_of_the_files: path of the results to be merges.
+    :return: None
+    """
+    dataframes = []
+
+    for file in (glob.glob(path_of_the_files + "/" + "*.html")):
+        df_set_definer = (Path(file).parts[-1].split('.')[0])
+
+        premise = []
+        hypothesis = []
+
+        prediction = []
+        contradiction = []
+        neutral = []
+        entailment = []
+
+        df = pd.read_html(file)
+        for line in range(len(df[0])):
+            premise.append(str(df[0]['premises'][line]))
+            hypothesis.append(str(df[0]['hypothesises'][line]))
+
+            prediction.append(df[0][df_set_definer + ' prediction'][line])
+            contradiction.append(df[0][df_set_definer + ' contradiction score'][line])
+            neutral.append(df[0][df_set_definer + ' neutral score'][line])
+            entailment.append(df[0][df_set_definer + ' entailment score'][line])
+
+        df = pd.DataFrame(
+            data={'premises': premise,
+                  'hypothesises': hypothesis,
+
+                  df_set_definer + ' prediction': prediction,
+                  df_set_definer + ' entailment score': entailment,
+                  df_set_definer + ' contradiction score': contradiction,
+                  df_set_definer + ' neutral score': neutral,
+                  }
+        )
+
+        dataframes.append(df)
+
+    concatenated_df = pd.concat([df.set_index(['premises', 'hypothesises']) for df in dataframes],
+                                axis=1).reset_index().to_html()
+    text_file = open(path_of_the_files + "/merged_results.html", "w")
+    text_file.write(concatenated_df)
+    text_file.close()
+
+
 def find_differences(html_results_main_path, df1_set_definer, df2_set_definer, df3_set_definer):
     """
     This function is hard coded and doesn't provide any modular structure. This function will be reworked to provide
@@ -222,7 +274,6 @@ def find_differences(html_results_main_path, df1_set_definer, df2_set_definer, d
         if (str(df1[0][df1_set_definer + ' prediction'][i]) != str(df2[0][df2_set_definer + ' prediction'][i]) or
                 str(df1[0][df1_set_definer + ' prediction'][i]) != str(df3[0][df3_set_definer + ' prediction'][i]) or
                 str(df2[0][df2_set_definer + ' prediction'][i]) != str(df3[0][df3_set_definer + ' prediction'][i])):
-
             premises.append(str(df1[0]['premise'][i]))
             hypothesis.append(str(df1[0]['hypothesis'][i]))
 
@@ -340,7 +391,8 @@ def anli_to_snli(nli_set_path, nli_definition):
 def mnli_to_snli(nli_set_path):
     """
     converts MNLI to SNLI format. MNLI comes with train - dev matched - dev mismatched. Matched comes from train
-    distribution while mismatched comes from unseen data. We extract first 10k examples for test. second 10k examples
+    distribution while mismatched comes from unseen data. matched and mismatched has the snli format so we only work
+    on the main dataset of mnli. We extract first 10k examples for test. second 10k examples
     for dev and rest goes for train. We use matched - mismatched data for evaluation after train.
     :param nli_set_path: path of the MNLI data.
     :return: None
@@ -368,20 +420,20 @@ def merge_snli_style_sets(nli_set_path, nli_definition):
     """
     Merges all nli set that found in the path. Beware, all the sets must be converted to snli format before merging.
     Function reads all data sequentially and merges them, saves as snli format. This approach usually used to see
-    the model behaviour when trained on all nli sets.
+    the model behaviour when trained on all nli sets. When sets are merged it will be written to parent folder dur to
+    the behaviour of 'write_nli_to_disk' function.
     :param nli_set_path: folder path of the nli sets.
     :param nli_definition: train - test - dev definition of the nli data. saves the merged set based on this definer.
     :return: None
     """
     total_data = []
-
-    for filename in glob.glob(nli_set_path):
-        with open(os.path.join(os.cwd(), filename), 'r') as file_:
+    for file in (glob.glob(nli_set_path + "/" + "*.jsonl")):
+        with open(file, 'r') as file_:
             for line in file_:
                 data = {}
                 eg = json.loads(line)
                 label = eg["gold_label"]
-                if label == "-":  # ignore - MNLI entries
+                if label == "-":  # ignore - SNLI entries
                     continue
                 data["sentence1"] = (eg["sentence1"])
                 data["sentence2"] = (eg["sentence2"])
@@ -417,13 +469,66 @@ def convert_glove_tokens_weights(glove_path):
         pickle.dump(vectors, f)
 
 
-def main():
+def label_comparison(human_label_path, model_result_path, nli_type):
     """
-    NLI files manipulations can be handled using utils main.
+    This function compares the human labels and predicted model labels on unseen test data. This type of comparisons
+    are usually required for when publishing a research paper. As an example, when a researcher runs the model on a real
+    life data to see how model behaves. Meantime a group of native language researchers labels the test data by hand.
+    When prediction time is finished. Researcher compares the model and human labels to see how good the model behaves.
+    This function assumes the human label is text data which only contains the example number and label and model result
+    path as html file which is a standard prediction demonstration format.
+    :param human_label_path: text data that contains human labels
+    :param model_result_path: html file that contains model prediction results
+    :param nli_type: nli type which the predictor model trained on.
     :return: None
     """
-    pass
+    f = open(human_label_path, "r")
+    text_labels = []
+    for line in f:
+        text_labels.append(line.split("-")[1].strip())
+
+    df1 = pd.read_html(model_result_path)
+    html_array = []
+    for i in range(57):
+        html_array.append(df1[0][nli_type + ' prediction'][i].strip())
+
+    tp = 0
+    total = 0
+
+    for i in range(len(html_array)):
+        print(html_array[i])
+        if text_labels[i] == html_array[i]:
+            tp += 1
+        total += 1
+
+    print("accuracy :", tp / total)
+
+
+def main():
+    """
+    NLI files manipulations can be handled using utilities main.
+    :return: None
+    """
+    merge_snli_style_sets(nli_set_path="/home/ulgen/Downloads/aa", nli_definition="train")
 
 
 if __name__ == "__main__":
     plac.call(main)
+
+"""
+
+Pandas numpy transformation.
+df = pd.read_json(path+'Processed_SNLI/train/neutral.json')['sentence1_vectors'].to_numpy()
+print(type(df))
+
+
+array to pandas data frame example
+arr = [[0.106217, 0.377535, -0.598523, -0.18559, 0.448664], [0.248715, 0.784982, -0.344282, -0.393607, -0.148429]]
+arr2 = [[0.106217, 0.377535, -0.598523, -0.18559, 0.448664], [0.248715, 0.784982, -0.344282, -0.393607, -0.148429]]
+df1 = pd.DataFrame(data={'A': arr})
+df1.insert(loc=1, column='_similarity', value=pd.DataFrame(data={'A': arr2}), allow_duplicates=True)
+
+pandas write dataframe to json
+df1.to_json(path + "aaa.json", orient='records')
+x = pd.read_json(path_or_buf=path + "aaa.json", orient='records')
+"""
