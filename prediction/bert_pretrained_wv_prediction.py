@@ -12,7 +12,7 @@ from keras import Model
 from keras.models import load_model
 
 from bert_dependencies import tokenization
-from utils.utils import read_nli, attention_visualization, xml_test_file_reader, load_configurations, \
+from utilities.utils import read_nli, attention_visualization, xml_test_file_reader, load_configurations, \
     predictions_to_html
 
 configs = load_configurations()
@@ -23,7 +23,7 @@ parser.add_argument("--mode", type=str, default="demo",
                          "is for comparing unlabeled data. Demo support two individual sentences or list of sentences"
                          "as input data.")
 
-parser.add_argument("--nli_type", type=str, default="snli",
+parser.add_argument("--nli_type", type=str, default="snli mnli anli",
                     help="This parameter defines the train data which the model trained on. By specifying this"
                          "one can see the model behaviour based on trained data on prediction time. There are 4 main "
                          "nli dataset 'snli', 'mnli', 'anli', 'fewer'. One can combine each of these according to"
@@ -32,6 +32,15 @@ parser.add_argument("--nli_type", type=str, default="snli",
 parser.add_argument("--transformer_type", type=str, default="bert",
                     help="Type of the transformer which will convert texts in to word-ids. This script is designed for"
                          "only bert. Parameter rakes only 'bert' option.")
+
+parser.add_argument("--model_type", type=str, default="esim",
+                    help="Type of the model that will be trained. "
+                         "for ESIM model type 'esim' "
+                         "for decomposable attention model type 'decomposable_attention'. ")
+
+parser.add_argument("--visualization", type=bool, default=True,
+                    help="shows attention heatmaps between two opinion sentences, best used with single"
+                         "premise- hypothesis opinion sentences.")
 
 parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
                     help="Main transformer model path which will convert the text in to word-ids and vectors. "
@@ -45,20 +54,11 @@ parser.add_argument("--max_length", type=str, default=configs["max_length"],
 parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
                     help="The path where trained NLI model is saved.")
 
-parser.add_argument("--model_type", type=str, default="esim",
-                    help="Type of the model that will be trained. "
-                         "for ESIM model type 'esim' "
-                         "for decomposable attention model type 'decomposable_attention'. ")
-
 parser.add_argument("--result_path", type=str, default=configs["results"],
                     help="path of the file where results and graphs will be saved.")
 
 parser.add_argument("--test_loc", type=str, default=configs["nli_set_test"],
                     help="Test data location which will be used to measure the evaluation accuracy,")
-
-parser.add_argument("--visualization", type=bool, default=True,
-                    help="shows attention heatmaps between two opinion sentences, best used with single"
-                         "premise- hypothesis opinion sentences.")
 args = parser.parse_args()
 
 entailment_types = ["entailment", "contradiction", "neutral"]
@@ -257,11 +257,8 @@ def main():
 
         path = "/media/ulgen/Samsung/contradiction_data_depo/results/a/data/UKPConvArg1Strict-XML/"
 
-        # premise, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_atheism.xml")
-        # hypothesis, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_christianity.xml")
-
-        premise = "If God doesn't exist, how come there are loads of predictions, sent by God, written thousands of years before Jesus saying exactly what happened to Jesus?"
-        hypothesis = "Neither. Agnostic is the true answer. People can believe there is a God or they can believe there isn't- but they can never know. I personally believe there isn't a God but I can never prove this definitely."
+        premise, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_atheism.xml")
+        hypothesis, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_christianity.xml")
 
         demo(max_length=args.max_length,
              transformer_path=args.transformer_path,

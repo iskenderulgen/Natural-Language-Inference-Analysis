@@ -3,13 +3,15 @@ This script is for spacy based NLI model that trained with pretrained word weigh
 Script works as standalone, loads the model and carries out the prediction.
 """
 import argparse
+
 import numpy as np
 import plac
 import tensorflow as tf
-
 from keras import Model
 from keras.models import load_model
-from utils.utils import read_nli, load_spacy_nlp, attention_visualization, load_configurations, xml_test_file_reader, \
+
+from utilities.utils import read_nli, load_spacy_nlp, attention_visualization, load_configurations, \
+    xml_test_file_reader, \
     predictions_to_html
 
 try:
@@ -34,6 +36,15 @@ parser.add_argument("--nli_type", type=str, default="snli",
                          "space. It will shorten the html cell size. For example 'snli mnli' for combination of snli "
                          "and mnli train sets.")
 
+parser.add_argument("--model_type", type=str, default="esim",
+                    help="Type of the model that will be trained. "
+                         "for ESIM model type 'esim' "
+                         "for decomposable attention model type 'decomposable_attention'. ")
+
+parser.add_argument("--visualization", type=bool, default=False,
+                    help="shows attention heatmaps between two opinion sentences, best used with single"
+                         "premise- hypothesis opinion sentences.")
+
 parser.add_argument("--transformer_type", type=str, default="glove",
                     help="Type of the transformer which will convert texts in to word-ids. Currently three types "
                          "are supported.Here the types as follows 'glove' -  'fasttext' - 'word2vec'."
@@ -52,11 +63,6 @@ parser.add_argument("--max_length", type=str, default=configs["max_length"],
 parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
                     help="The path where trained NLI model is saved.")
 
-parser.add_argument("--model_type", type=str, default="esim",
-                    help="Type of the model that will be trained. "
-                         "for ESIM model type 'esim' "
-                         "for decomposable attention model type 'decomposable_attention'. ")
-
 parser.add_argument("--result_path", type=str, default=configs["results"],
                     help="path of the file where results and graphs will be saved.")
 
@@ -66,10 +72,6 @@ parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
 
 parser.add_argument("--test_loc", type=str, default=configs["nli_set_test"],
                     help="Test data location which will be used to measure the evaluation accuracy,")
-
-parser.add_argument("--visualization", type=bool, default=False,
-                    help="shows attention heatmaps between two opinion sentences, best used with single"
-                         "premise- hypothesis opinion sentences.")
 args = parser.parse_args()
 
 entailment_types = ["entailment", "contradiction", "neutral"]
