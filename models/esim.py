@@ -34,40 +34,38 @@ def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate, e
     x1 = bilstm1(x1)
     x2 = bilstm1(x2)
 
-    e = layers.Dot(axes=2, name="dot product of x1 x2")([x1, x2])
-    attend_e1 = layers.Softmax(axis=2, name="softmax of dot on axis 2")(e)
-    attend_e2 = layers.Softmax(axis=1, name="softmax of dot on axis 1")(e)
-    e1 = layers.Lambda(K.expand_dims, arguments={'axis': 3}, name="expand dim on attend_e1")(attend_e1)
-    e2 = layers.Lambda(K.expand_dims, arguments={'axis': 3}, name="expand dim on attend_e2")(attend_e2)
+    e = layers.Dot(axes=2, name="dot_product_of_x1_x2")([x1, x2])
+    attend_e1 = layers.Softmax(axis=2, name="softmax_of_dot_on_axis_2")(e)
+    attend_e2 = layers.Softmax(axis=1, name="softmax_of_dot_on_axis_1")(e)
+    e1 = layers.Lambda(K.expand_dims, arguments={'axis': 3}, name="expand_dim_on_attend_e1")(attend_e1)
+    e2 = layers.Lambda(K.expand_dims, arguments={'axis': 3}, name="expand_dim_on_attend_e2")(attend_e2)
 
-    _x1 = layers.Lambda(K.expand_dims, arguments={'axis': 1}, name="expand dim on x2")(x2)
-    _x1 = layers.Multiply(name="multiply e1 with expanded x2")([e1, _x1])
+    _x1 = layers.Lambda(K.expand_dims, arguments={'axis': 1}, name="expand_dim_on_x2")(x2)
+    _x1 = layers.Multiply(name="multiply_e1_with_expanded_x2")([e1, _x1])
     _x1 = layers.Lambda(K.sum, arguments={'axis': 2}, name="sum_x1")(_x1)
-    _x2 = layers.Lambda(K.expand_dims, arguments={'axis': 2}, name="expand dim on x1")(x1)
-    _x2 = layers.Multiply(name="multiply e2 with expanded x1")([e2, _x2])
+    _x2 = layers.Lambda(K.expand_dims, arguments={'axis': 2}, name="expand_dim_on_x1")(x1)
+    _x2 = layers.Multiply(name="multiply_e2_with_expanded_x1")([e2, _x2])
     _x2 = layers.Lambda(K.sum, arguments={'axis': 1}, name="sum_x2")(_x2)
 
-    m1 = layers.Concatenate(name="concatenate x1 with attended x1")(
+    m1 = layers.Concatenate(name="concatenate_x1_with_attended_x1")(
         [x1, _x1, layers.Subtract()([x1, _x1]), layers.Multiply()([x1, _x1])])
-    m2 = layers.Concatenate(name="concatenate x2 with attended x2")(
+    m2 = layers.Concatenate(name="concatenate_x2_with_attended_x2")(
         [x2, _x2, layers.Subtract()([x2, _x2]), layers.Multiply()([x2, _x2])])
 
     y1 = bilstm2(m1)
     y2 = bilstm2(m2)
 
-    mx1 = layers.Lambda(K.max, arguments={'axis': 1}, name="k.max of y1")(y1)
-    av1 = layers.Lambda(K.mean, arguments={'axis': 1}, name="k.mean of y1")(y1)
-    mx2 = layers.Lambda(K.max, arguments={'axis': 1}, name="k.max of y2")(y2)
-    av2 = layers.Lambda(K.mean, arguments={'axis': 1}, name="k.mean of y2")(y2)
+    mx1 = layers.Lambda(K.max, arguments={'axis': 1}, name="k.max_of_y1")(y1)
+    av1 = layers.Lambda(K.mean, arguments={'axis': 1}, name="k.mean_of_y1")(y1)
+    mx2 = layers.Lambda(K.max, arguments={'axis': 1}, name="k.max_of_y2")(y2)
+    av2 = layers.Lambda(K.mean, arguments={'axis': 1}, name="k.mean_of_y2")(y2)
 
-    y = layers.Concatenate(name="concatenate max and mean of y1 and y2")([av1, mx1, av2, mx2])
-    y = layers.Dense(1024)(y)
-    y = layers.ReLU()(y)
+    y = layers.Concatenate(name="concatenate_max_and_mean_of_y1_and_y2")([av1, mx1, av2, mx2])
+    y = layers.Dense(1024, activation='relu')(y)
     y = layers.Dropout(0.2)(y)
-    y = layers.Dense(512)(y)
-    y = layers.ReLU()(y)
+    y = layers.Dense(512, activation='relu')(y)
     y = layers.Dropout(0.2)(y)
-    y = layers.Dense(nr_class, activation='last classifier layer')(y)
+    y = layers.Dense(nr_class, activation='softmax', name='last_classifier_layer')(y)
 
     model = Model(inputs=[input1, input2], outputs=[y])
 

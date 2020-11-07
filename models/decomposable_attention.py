@@ -33,16 +33,16 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
 
     G = create_feedforward(num_units=nr_hidden)
 
-    norm_weights_a = layers.Lambda(normalizer(1), name='normalize axis 1 of att_weights')(att_weights)
-    norm_weights_b = layers.Lambda(normalizer(2), name='normalize axis 2 of att_weights')(att_weights)
-    alpha = layers.dot([norm_weights_a, x1], axes=1, name='dot product norm_weight_a with x1')
-    beta = layers.dot([norm_weights_b, x2], axes=1, name='dot product norm_weight_b with x2')
+    norm_weights_a = layers.Lambda(normalizer(1), name='normalize_axis_1_of_att_weights')(att_weights)
+    norm_weights_b = layers.Lambda(normalizer(2), name='normalize_axis_2_of_att_weights')(att_weights)
+    alpha = layers.dot([norm_weights_a, x1], axes=1, name='dot_product_norm_weight_a_with_x1')
+    beta = layers.dot([norm_weights_b, x2], axes=1, name='dot_product_norm_weight_b_with_x2')
 
     # step 2: compare
-    comp1 = layers.concatenate([x1, beta], name='concatenate x1 with beta')
-    comp2 = layers.concatenate([x2, alpha], name='concatenate x2 with alpha')
-    x1 = layers.TimeDistributed(G, name='Time Distribute concat 1 with feed forward G')(comp1)
-    x2 = layers.TimeDistributed(G, name='Time Distribute concat 2 with feed forward G')(comp2)
+    comp1 = layers.concatenate([x1, beta], name='concatenate_x1_with_beta')
+    comp2 = layers.concatenate([x2, alpha], name='concatenate_x2_with_alpha')
+    x1 = layers.TimeDistributed(G, name='Time_Distribute_concat_1_with_feed_forward_G')(comp1)
+    x2 = layers.TimeDistributed(G, name='Time_Distribute_concat_2_with_feed_forward G')(comp2)
 
     # step 3: aggregate
     v1_sum = layers.Lambda(sum_word, name='sum_x1')(x1)
@@ -51,7 +51,7 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
 
     H = create_feedforward(num_units=nr_hidden)
     out = H(concat)
-    out = layers.Dense(nr_class, activation="softmax", name='last classifier layer')(out)
+    out = layers.Dense(nr_class, activation="softmax", name='last_classifier_layer')(out)
 
     model = Model([input1, input2], out)
 
