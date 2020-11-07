@@ -12,8 +12,8 @@ import numpy as np
 import plac
 import matplotlib.pyplot as plt
 
-from keras.callbacks import EarlyStopping
-from utils.utils import read_nli, load_spacy_nlp, load_configurations
+from tensorflow.keras.callbacks import EarlyStopping
+from utilities.utils import read_nli, load_spacy_nlp, load_configurations
 from models.esim import esim_bilstm_model
 from models.decomposable_attention import decomposable_attention_model
 
@@ -84,6 +84,9 @@ parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"]
 
 parser.add_argument("--result_path", type=str, default=configs["results"],
                     help="path of the file where trained model loss and accuracy graphs will be saved.")
+
+parser.add_argument("--early_stopping", type=int, default=configs["early_stopping"],
+                    help="early stopping parameter for model, which stops training when reaching best accuracy.")
 args = parser.parse_args()
 
 
@@ -310,9 +313,9 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     with open(result_path + 'result_history.txt', 'w') as file:
         file.write(str(history.history))
 
-    if not os.path.isdir(model_save_path):
-        os.mkdir(model_save_path)
-    print("Saving to", model_save_path)
+    if not os.path.isdir(model_save_path[model_type]):
+        os.mkdir(model_save_path[model_type])
+    print("Saving to", model_save_path[model_type])
 
     model.save(model_save_path[model_type] + "model.h5")
 
