@@ -1,5 +1,5 @@
-from keras import backend as K
-from keras import layers, Model, models, optimizers
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers, Model, models, optimizers
 
 
 def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learning_rate, embedding_type):

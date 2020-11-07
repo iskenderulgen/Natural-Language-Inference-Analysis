@@ -1,7 +1,6 @@
-from keras import backend as K
-from keras import layers, Model, optimizers, models
-from keras.layers import CuDNNLSTM
-from keras.layers.wrappers import Bidirectional
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers, Model, optimizers, models
+from tensorflow.keras.layers import Bidirectional, CuDNNLSTM
 
 
 def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate, embedding_type):
