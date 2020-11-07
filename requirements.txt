@@ -19,3 +19,4 @@ scipy==1.5.2
 statsmodels==0.12.0
 bioinfokit==1.0.2
 six==1.15.0
+keras-gpu==2.3.1
