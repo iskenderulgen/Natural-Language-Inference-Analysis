@@ -17,7 +17,6 @@ from utilities.utils import read_nli, load_spacy_nlp, load_configurations
 from models.esim import esim_bilstm_model
 from models.decomposable_attention import decomposable_attention_model
 
-
 configs = load_configurations()
 
 parser = argparse.ArgumentParser()
@@ -182,7 +181,7 @@ def spacy_word_transformer(transformer_path, transformer_type, train_loc, dev_lo
     :param processed_path: path where the processed files will be based.
     :return: returns train - dev set and corresponding labels with word weights.
     """
-    
+
     print("Starting to pre-process using spacy. Transformer type is ", transformer_type)
 
     nlp = load_spacy_nlp(transformer_path=transformer_path, transformer_type=transformer_type)
@@ -269,7 +268,7 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
 
     model.summary()
 
-    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1,
+    es = EarlyStopping(monitor='val_acc', mode='max', verbose=1,
                        patience=early_stopping, restore_best_weights=True)
 
     history = model.fit(
@@ -286,14 +285,14 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
         os.mkdir(result_path)
 
     # summarize history for accuracy
-    plt.plot(history.history['accuracy'])
-    plt.plot(history.history['val_accuracy'])
+    plt.plot(history.history['acc'])
+    plt.plot(history.history['val_acc'])
     plt.title('model accuracy')
     plt.ylabel('accuracy')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
     plt.savefig(result_path + 'accuracy.png', bbox_inches='tight')
+    plt.show()
 
     # summarize history for loss
     plt.plot(history.history['loss'])
@@ -302,8 +301,8 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     plt.ylabel('loss')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
     plt.savefig(result_path + 'loss.png', bbox_inches='tight')
+    plt.show()
 
     print('\n model history:', history.history)
 

@@ -32,10 +32,10 @@ import plac
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-from keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping
 from models.decomposable_attention import decomposable_attention_model
 from models.esim import esim_bilstm_model
-from utils.utils import read_nli, load_configurations
+from utilities.utils import read_nli, load_configurations
 from bert_dependencies import tokenization
 
 configs = load_configurations()
@@ -54,6 +54,10 @@ parser.add_argument("--model_type", type=str, default="esim",
                     help="Type of the model that will be trained. "
                          "for ESIM model type 'esim' "
                          "for decomposable attention model type 'decomposable_attention'.")
+
+parser.add_argument("--do_lower_case", type=bool, default=True,
+                    help="Whether to lower case the input text. Should be True for uncased "
+                         "models and False for cased models.")
 
 parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
                     help="Main transformer model path which will convert the text in to word-ids and vectors. "
@@ -102,6 +106,9 @@ parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"]
 
 parser.add_argument("--result_path", type=str, default=configs["results"],
                     help="path of the file where trained model loss and accuracy graphs will be saved.")
+
+parser.add_argument("--early_stopping", type=int, default=configs["early_stopping"],
+                    help="early stopping parameter for model, which stops training when reaching best accuracy.")
 args = parser.parse_args()
 
 
@@ -289,7 +296,7 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
 
     model.summary()
 
-    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1,
+    es = EarlyStopping(monitor='val_acc', mode='max', verbose=1,
                        patience=early_stopping, restore_best_weights=True)
 
     history = model.fit(
@@ -306,14 +313,14 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
         os.mkdir(result_path)
 
     # summarize history for accuracy
-    plt.plot(history.history['accuracy'])
-    plt.plot(history.history['val_accuracy'])
+    plt.plot(history.history['acc'])
+    plt.plot(history.history['val_acc'])
     plt.title('model accuracy')
     plt.ylabel('accuracy')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
     plt.savefig(result_path + 'accuracy.png', bbox_inches='tight')
+    plt.show()
 
     # summarize history for loss
     plt.plot(history.history['loss'])
@@ -322,8 +329,8 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     plt.ylabel('loss')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
     plt.savefig(result_path + 'loss.png', bbox_inches='tight')
+    plt.show()
 
     print('\n model history:', history.history)
 
@@ -333,9 +340,9 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     with open(result_path + 'result_history.txt', 'w') as file:
         file.write(str(history.history))
 
-    if not os.path.isdir(model_save_path):
-        os.mkdir(model_save_path)
-    print("Saving to", model_save_path)
+    if not os.path.isdir(model_save_path[model_type]):
+        os.mkdir(model_save_path[model_type])
+    print("Saving to", model_save_path[model_type])
 
     model.save(model_save_path[model_type] + "model.h5")
 
