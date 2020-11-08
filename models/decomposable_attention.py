@@ -42,7 +42,7 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
     comp1 = layers.concatenate([x1, beta], name='concatenate_x1_with_beta')
     comp2 = layers.concatenate([x2, alpha], name='concatenate_x2_with_alpha')
     x1 = layers.TimeDistributed(G, name='Time_Distribute_concat_1_with_feed_forward_G')(comp1)
-    x2 = layers.TimeDistributed(G, name='Time_Distribute_concat_2_with_feed_forward G')(comp2)
+    x2 = layers.TimeDistributed(G, name='Time_Distribute_concat_2_with_feed_forward_G')(comp2)
 
     # step 3: aggregate
     v1_sum = layers.Lambda(sum_word, name='sum_x1')(x1)
