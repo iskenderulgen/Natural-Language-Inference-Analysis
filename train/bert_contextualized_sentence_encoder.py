@@ -26,11 +26,11 @@ import plac
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-from keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping
 from bert_dependencies import modeling, tokenization
 from models.decomposable_attention import decomposable_attention_model
 from models.esim import esim_bilstm_model
-from utils.utils import read_nli, load_configurations
+from utilities.utils import read_nli, load_configurations
 
 configs = load_configurations()
 
@@ -108,6 +108,9 @@ parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"]
 
 parser.add_argument("--result_path", type=str, default=configs["results"],
                     help="path where trained model loss and accuracy graphs will be saved.")
+
+parser.add_argument("--early_stopping", type=int, default=configs["early_stopping"],
+                    help="early stopping parameter for model, which stops training when reaching best accuracy.")
 args = parser.parse_args()
 
 
@@ -182,7 +185,7 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
                      use_one_hot_embeddings):
     """Returns `model_fn` closure for TPUEstimator."""
 
-    def model_fn(features, mode):  # pylint: disable=unused-argument
+    def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
         """The `model_fn` for TPUEstimator."""
 
         unique_ids = features["unique_ids"]
@@ -361,7 +364,7 @@ def read_examples(input_sentences):
             line = tokenization.convert_to_unicode(sentence).strip()
             examples.append(InputExample(unique_id=unique_id, text_a=line, text_b=None))
             unique_id += 1
-        return examples
+        return examples, len(examples)
 
 
 def contextualized_feature_transformer(bert_directory, premises, hypothesis, max_length):
@@ -409,7 +412,7 @@ def contextualized_feature_transformer(bert_directory, premises, hypothesis, max
 
     # max seq length can be imported as parameter
     input_fn = input_fn_builder(
-        features=features, seq_length=args.max_seq_length)
+        features=features, seq_length=args.max_length)
 
     processed_sent_count = 0
     sentence_vectors = []
@@ -424,11 +427,12 @@ def contextualized_feature_transformer(bert_directory, premises, hypothesis, max
                 layer_output = result["layer_output_%d" % j]
                 layers_output_flat = [round(float(x), 6) for x in layer_output[i:(i + 1)].flat]
                 all_layers.append(layers_output_flat)
-            tokens_weights.append(sum(all_layers)[:4])
+            tokens_weights.append(sum(np.asarray(all_layers))[:1024])
         sentence_vectors.append(np.mean(tokens_weights, axis=0))
+        print(np.asarray(sentence_vectors).shape)
 
         processed_sent_count = processed_sent_count + 1
-        if processed_sent_count % 50000 == 0:
+        if processed_sent_count % 5000 == 0:
             print("Processed sentence: ", str(processed_sent_count),
                   "Processed percent: ", str(round(processed_sent_count / total_sent_count, 4) * 100))
 
@@ -530,14 +534,14 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
         os.mkdir(result_path)
 
     # summarize history for accuracy
-    plt.plot(history.history['accuracy'])
-    plt.plot(history.history['val_accuracy'])
+    plt.plot(history.history['acc'])
+    plt.plot(history.history['val_acc'])
     plt.title('model accuracy')
     plt.ylabel('accuracy')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
     plt.savefig(result_path + 'accuracy.png', bbox_inches='tight')
+    plt.show()
 
     # summarize history for loss
     plt.plot(history.history['loss'])
@@ -546,8 +550,8 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     plt.ylabel('loss')
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
     plt.savefig(result_path + 'loss.png', bbox_inches='tight')
+    plt.show()
 
     print('\n model history:', history.history)
 
@@ -557,9 +561,9 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     with open(result_path + 'result_history.txt', 'w') as file:
         file.write(str(history.history))
 
-    if not os.path.isdir(model_save_path):
-        os.mkdir(model_save_path)
-    print("Saving trained model to", model_save_path)
+    if not os.path.isdir(model_save_path[model_type]):
+        os.mkdir(model_save_path[model_type])
+    print("Saving trained model to", model_save_path[model_type])
 
     model.save(model_save_path[model_type] + "model.h5")
 
