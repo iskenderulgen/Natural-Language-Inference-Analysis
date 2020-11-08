@@ -422,6 +422,9 @@ def contextualized_feature_transformer(bert_directory, premises, hypothesis, max
         feature = unique_id_to_feature[unique_id]
         tokens_weights = []
         for (i, token) in enumerate(feature.tokens):
+            if token in ['[CLS]', '[SEP]']:
+                continue
+            print(token)
             all_layers = []
             for (j, layer_index) in enumerate(layer_indexes):
                 layer_output = result["layer_output_%d" % j]
