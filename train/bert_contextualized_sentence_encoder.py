@@ -520,7 +520,7 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
 
     model.summary()
 
-    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1,
+    es = EarlyStopping(monitor='val_acc', mode='max', verbose=1,
                        patience=early_stopping, restore_best_weights=True)
 
     history = model.fit(
