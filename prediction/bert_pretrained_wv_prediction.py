@@ -8,8 +8,8 @@ import argparse
 import numpy as np
 import plac
 import tensorflow as tf
-from keras import Model
-from keras.models import load_model
+from tensorflow.keras import Model
+from tensorflow.keras.models import load_model
 
 from bert_dependencies import tokenization
 from utilities.utils import read_nli, attention_visualization, xml_test_file_reader, load_configurations, \
@@ -23,7 +23,7 @@ parser.add_argument("--mode", type=str, default="demo",
                          "is for comparing unlabeled data. Demo support two individual sentences or list of sentences"
                          "as input data.")
 
-parser.add_argument("--nli_type", type=str, default="snli mnli anli",
+parser.add_argument("--nli_type", type=str, default="snli",
                     help="This parameter defines the train data which the model trained on. By specifying this"
                          "one can see the model behaviour based on trained data on prediction time. There are 4 main "
                          "nli dataset 'snli', 'mnli', 'anli', 'fewer'. One can combine each of these according to"
@@ -180,7 +180,11 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
         outputs = model.predict([premise_features, hypothesis_features])
         scores = outputs[0]
 
-        print("Entailment type is:", entailment_types[scores.argmax()], "\nEntailment confidence is: ", scores.max())
+        print("Entailment type is:", entailment_types[scores.argmax()],
+              "\nEntailment confidence is: ", scores.max(),
+              "\nContradiction score is", float("{:.8f}".format(float(outputs[0][0][1]))),
+              "\nEntailment score is", float("{:.8f}".format(float(outputs[0][0][0]))),
+              "\nNeutral score is,", float("{:.8f}".format(float(outputs[0][0][2]))))
         if attention_map:
             attention_visualization(tokens1=premise_token, tokens2=hypothesis_token,
                                     attention1=outputs[1], attention2=outputs[2],
@@ -255,10 +259,13 @@ def main():
 
     elif args.mode == "demo":
 
-        path = "/media/ulgen/Samsung/contradiction_data_depo/results/a/data/UKPConvArg1Strict-XML/"
+        # path = "/media/ulgen/Samsung/contradiction_data_depo/results/a/data/UKPConvArg1Strict-XML/"
 
-        premise, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_atheism.xml")
-        hypothesis, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_christianity.xml")
+        # premise, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_atheism.xml")
+        # hypothesis, _ = xml_test_file_reader(path=path + "christianity-or-atheism-_christianity.xml")
+
+        premise = "in the park alice plays a flute solo"
+        hypothesis = "someone playing music outside"
 
         demo(max_length=args.max_length,
              transformer_path=args.transformer_path,

@@ -1,7 +1,3 @@
-"""
-This script is for spacy based NLI model that trained with pretrained word weights such as glove - fasttext - word2vec.
-Script works as standalone, loads the model and carries out the prediction.
-"""
 import argparse
 
 import numpy as np
@@ -9,19 +5,14 @@ import plac
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.models import load_model
-
-from utilities.utils import read_nli, load_spacy_nlp, attention_visualization, load_configurations, \
-    xml_test_file_reader, \
+import tensorflow_hub as hub
+from bert import tokenization
+from utilities.utils import read_nli, attention_visualization, xml_test_file_reader, load_configurations, \
     predictions_to_html
-
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
 
 configs = load_configurations()
 parser = argparse.ArgumentParser()
-parser.add_argument("--mode", type=str, default="demo",
+parser.add_argument("--mode", type=str, default="evaluate",
                     help="This argument is to select whether to carry out 'evaluate' or 'demo' operation. Evaluate"
                          "operation takes labeled test data and measures the accuracy of the model. Demo operation"
                          "is for comparing unlabeled data. Demo support two individual sentences or list of sentences"
@@ -31,10 +22,11 @@ parser.add_argument("--nli_type", type=str, default="snli",
                     help="This parameter defines the train data which the model trained on. By specifying this"
                          "one can see the model behaviour based on trained data on prediction time. There are 4 main "
                          "nli dataset 'snli', 'mnli', 'anli', 'fewer'. One can combine each of these according to"
-                         "their needs. Specify this by hand based on the model you will use on prediction time.If you"
-                         "combine train sets, dont use underline to define combination. Send parameter with one blank"
-                         "space. It will shorten the html cell size. For example 'snli mnli' for combination of snli "
-                         "and mnli train sets.")
+                         "their needs. Specify this by hand based on the model you will use on prediction time")
+
+parser.add_argument("--transformer_type", type=str, default="bert",
+                    help="Type of the transformer which will convert texts in to word-ids. This script is designed for"
+                         "only bert. Parameter rakes only 'bert' option.")
 
 parser.add_argument("--model_type", type=str, default="esim",
                     help="Type of the model that will be trained. "
@@ -45,15 +37,12 @@ parser.add_argument("--visualization", type=bool, default=True,
                     help="shows attention heatmaps between two opinion sentences, best used with single"
                          "premise- hypothesis opinion sentences.")
 
-parser.add_argument("--transformer_type", type=str, default="glove",
-                    help="Type of the transformer which will convert texts in to word-ids. Currently three types "
-                         "are supported.Here the types as follows 'glove' -  'fasttext' - 'word2vec'."
-                         "Pick one you'd like to transform into")
+parser.add_argument("--bert_tf_hub_path", type=str, default=configs["transformer_paths"]["tf_hub_path"],
+                    help="import bert tensforlow hub model")
 
 parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
                     help="Main transformer model path which will convert the text in to word-ids and vectors. "
-                         "transformer path has four sub paths, load_nlp module will carry out the sub model paths"
-                         "based on transformer_type selection")
+                         "transformer path has four sub paths.")
 
 parser.add_argument("--max_length", type=str, default=configs["max_length"],
                     help="Max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
@@ -66,10 +55,6 @@ parser.add_argument("--model_save_path", type=str, default=configs["model_paths"
 parser.add_argument("--result_path", type=str, default=configs["results"],
                     help="path of the file where results and graphs will be saved.")
 
-parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
-                    help="number of unknown vectors which will be used for padding the short sentences to desired"
-                         "length.Nr unknown vectors will be created using random module")
-
 parser.add_argument("--test_loc", type=str, default=configs["nli_set_test"],
                     help="Test data location which will be used to measure the evaluation accuracy,")
 args = parser.parse_args()
@@ -77,104 +62,68 @@ args = parser.parse_args()
 entailment_types = ["entailment", "contradiction", "neutral"]
 
 
-def get_word_ids(docs, max_length=100, nr_unk=100):
-    xs = np.zeros((len(docs), max_length), dtype="int32")
-    for i, doc in enumerate(docs):
-        for j, token in enumerate(doc):
-            if j == max_length:
-                break
-            if token.has_vector:
-                xs[i, j] = token.rank + nr_unk + 1
-            else:
-                xs[i, j] = token.rank % nr_unk + 1
-    return xs
+def bert_encode(text, max_length, tokenizer, attention_heatmap):
+    text = tokenizer.tokenize(text)
+
+    text = text[:max_length - 2]
+    input_sequence = ["[CLS]"] + text + ["[SEP]"]
+    pad_len = max_length - len(input_sequence)
+
+    tokens = tokenizer.convert_tokens_to_ids(input_sequence)
+    tokens += [0] * pad_len
+    pad_masks = [1] * len(input_sequence) + [0] * pad_len
+    segment_ids = [0] * max_length
+
+    if attention_heatmap:
+        return np.asarray(tokens), np.asarray(pad_masks), np.asarray(segment_ids), input_sequence
+    else:
+        return np.asarray(tokens), np.asarray(pad_masks), np.asarray(segment_ids)
 
 
-class SpacyPrediction(object):
-    entailment_types = ["entailment", "contradiction", "neutral"]
+def evaluate(dev_loc, max_length, tf_hub_path, model_path, model_type):
+    print("Loading trained NLI model")
+    model = load_model(model_path[model_type] + "model.h5", custom_objects={"tf": tf, "KerasLayer": hub.KerasLayer})
+    print("trained NLI model loaded")
 
-    @classmethod
-    def load(cls, path, max_length, get_features=None):
-        if get_features is None:
-            get_features = get_word_ids
+    bert_encoder = hub.KerasLayer(tf_hub_path)
+    vocab_file = bert_encoder.resolved_object.vocab_file.asset_path.numpy()
+    do_lower_case = bert_encoder.resolved_object.do_lower_case.numpy()
+    tokenizer = tokenization.FullTokenizer(vocab_file, do_lower_case)
 
-        model = load_model(path, custom_objects={"tf": tf})
-        print("loading model")
-        #############
-        model = Model(inputs=model.input,
-                      outputs=[model.output,
-                               model.get_layer('sum_x1').output,
-                               model.get_layer('sum_x2').output])
-        #############
-        model.summary()
-        print("NLI model loaded")
-
-        return cls(model, get_features=get_features, max_length=max_length)
-
-    def __init__(self, model, get_features=None, max_length=100):
-        self.model = model
-        self.get_features = get_features
-        self.max_length = max_length
-
-    def __call__(self, doc):
-        doc.user_hooks["similarity"] = self.predict
-        doc.user_span_hooks["similarity"] = self.predict
-
-        return doc
-
-    def predict(self, doc1, doc2):
-        x1 = self.get_features([doc1], max_length=self.max_length)
-        x2 = self.get_features([doc2], max_length=self.max_length)
-        outputs = self.model.predict([x1, x2])
-
-        # scores = outputs[0]
-        # return self.entailment_types[scores.argmax()], scores.max(), outputs[1], outputs[2]
-
-        return outputs
-
-
-def evaluate(dev_loc, max_length, transformer_path, transformer_type, model_path, model_type):
-    """
-    This function is to measure model accuracy, it takes labeled test NLI data and performs model test on it.
-    :param dev_loc: labeled test data location.
-    :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
-    :param transformer_path: path of the transformer nlp object.
-    :param transformer_type: type of the transformer glove - fasttext or word2vec.
-    :param model_path: path where the model is saved as h5 file.
-    :param model_type: type of the model. either ESIM or Decomposable attention.
-    :return: None
-    """
-
-    disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
+    model.summary()
+    model = Model(inputs=model.input,
+                  outputs=[model.output, model.get_layer('sum_x1').output, model.get_layer('sum_x2').output])
 
     premise, hypothesis, dev_labels = read_nli(dev_loc)
-    nlp = load_spacy_nlp(transformer_path=transformer_path, transformer_type=transformer_type)
-    nlp.add_pipe(SpacyPrediction.load(path=model_path[model_type] + "model.h5", max_length=max_length))
 
     total = 0.0
     true_p = 0.0
 
     for text1, text2, label in zip(premise, hypothesis, dev_labels):
-        doc1 = nlp(text1, disable=disabled_pipelines)
-        doc2 = nlp(text2, disable=disabled_pipelines)
+        tokens1, masks1, segments1 = bert_encode(text=text1, max_length=max_length,
+                                                 tokenizer=tokenizer, attention_heatmap=False)
 
-        outputs = doc1.similarity(doc2)
-        scores = outputs[0]
-        if entailment_types[scores.argmax()] == SpacyPrediction.entailment_types[label.argmax()]:
+        tokens2, masks2, segments2 = bert_encode(text=text2, max_length=max_length,
+                                                 tokenizer=tokenizer, attention_heatmap=False)
+
+        outputs = model.predict([[tokens1], [masks1], [segments1],
+                                 [tokens2], [masks2], [segments2]])
+        # scores = outputs[0]
+        if entailment_types[outputs[0].argmax()] == entailment_types[label.argmax()]:
             true_p += 1
         total += 1
     print("Entailment Model Accuracy is", true_p / total)
 
 
-def demo(premise, hypothesis, transformer_path, transformer_type, model_path, model_type,
-         max_length, attention_map, result_path, nli_type):
+def demo(premise, hypothesis, transformer_type, model_path, model_type,
+         max_length, attention_map, result_path, nli_type, tf_hub_path):
     """
     Performs demo operation using trained NLI model. Either takes two strings or list of strings and compares the
     premise - hypothesis pairwise and returns the NLI result.
+    :param tf_hub_path: Bert contextualized transformer Tensorflow Hub Path.
     :param premise: opinion sentence
     :param hypothesis: opinion sentence
-    :param transformer_path: path of the transformer nlp object.
-    :param transformer_type: type of the transformer glove - fasttext or word2vec.
+    :param transformer_type: type of the transformer in this case it is 'bert'.
     :param model_path: path where the model is saved as h5 file.
     :param model_type: type of the model. either ESIM or Decomposable attention.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
@@ -184,21 +133,34 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
     :return: None
     """
 
-    disabled_pipelines = ['parser', 'tagger', 'ner', 'textcat']
-    nlp = load_spacy_nlp(transformer_path=transformer_path, transformer_type=transformer_type)
-    nlp.add_pipe(SpacyPrediction.load(path=model_path[model_type] + "model.h5", max_length=max_length))
+    print("Loading NLI model")
+    model = load_model(model_path[model_type] + "model.h5", custom_objects={"tf": tf, "KerasLayer": hub.KerasLayer})
+    print("NLI model loaded")
+
+    bert_encoder = hub.KerasLayer(tf_hub_path)
+    vocab_file = bert_encoder.resolved_object.vocab_file.asset_path.numpy()
+    do_lower_case = bert_encoder.resolved_object.do_lower_case.numpy()
+    tokenizer = tokenization.FullTokenizer(vocab_file, do_lower_case)
+
+    model.summary()
+    model = Model(inputs=model.input,
+                  outputs=[model.output, model.get_layer('sum_x1').output, model.get_layer('sum_x2').output])
 
     if type(premise) and type(hypothesis) is str:
 
-        doc1 = nlp(premise, disable=disabled_pipelines)
-        doc2 = nlp(hypothesis, disable=disabled_pipelines)
+        print("premise:", premise)
+        print("hypothesis:", hypothesis)
 
-        print("premise:", doc1)
-        print("hypothesis   :", doc2)
+        tokens1, masks1, segments1, words1 = bert_encode(text=premise, max_length=max_length,
+                                                         tokenizer=tokenizer, attention_heatmap=True)
 
-        outputs = doc1.similarity(doc2)
+        tokens2, masks2, segments2, words2 = bert_encode(text=hypothesis, max_length=max_length,
+                                                         attention_heatmap=True, tokenizer=tokenizer)
 
+        outputs = model.predict([[tokens1], [masks1], [segments1],
+                                 [tokens2], [masks2], [segments2]])
         scores = outputs[0]
+
         print("Entailment type is:", entailment_types[scores.argmax()],
               "\nEntailment confidence is: ", scores.max(),
               "\nContradiction score is", float("{:.8f}".format(float(outputs[0][0][1]))),
@@ -206,21 +168,9 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
               "\nNeutral score is,", float("{:.8f}".format(float(outputs[0][0][2]))))
 
         if attention_map:
-            def get_attended_tokens(doc):
-                words = []
-                for token in doc:
-                    words.append(token.text)
-                return words
-
-            tokens1 = get_attended_tokens(doc=doc1)
-            tokens2 = get_attended_tokens(doc=doc2)
-
-            attention_visualization(tokens1=tokens1,
-                                    tokens2=tokens2,
-                                    attention1=outputs[1],
-                                    attention2=outputs[2],
-                                    results_path=result_path,
-                                    transformer_type=transformer_type)
+            attention_visualization(tokens1=words1, tokens2=words2,
+                                    attention1=outputs[1], attention2=outputs[2],
+                                    results_path=result_path, transformer_type=transformer_type)
 
     elif type(premise) and type(hypothesis) is list:
         a = min(len(premise), len(hypothesis))
@@ -238,10 +188,14 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
         neutral = 0.0
 
         for text1, text2 in zip(premises, hypothesises):
-            doc1 = nlp(text1, disable=disabled_pipelines)
-            doc2 = nlp(text2, disable=disabled_pipelines)
+            tokens1, masks1, segments1, words1 = bert_encode(text=text1, max_length=max_length,
+                                                             tokenizer=tokenizer, attention_heatmap=False)
 
-            outputs = doc1.similarity(doc2)
+            tokens2, masks2, segments2, words2 = bert_encode(text=text2, max_length=max_length,
+                                                             attention_heatmap=False, tokenizer=tokenizer)
+
+            outputs = model.predict([[tokens1], [masks1], [segments1],
+                                     [tokens2], [masks2], [segments2]])
             prediction = entailment_types[outputs[0].argmax()]
 
             prediction_type.append(prediction)
@@ -256,6 +210,7 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
             elif prediction is 'neutral':
                 neutral += 1
             total += 1
+
         print("total contradiction = ", contradiction / total)
         print("total entailment =", entailment / total)
         print("total neutral =", neutral / total)
@@ -278,14 +233,15 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
 
 def main():
     if args.mode == "evaluate":
+        print("test mode is", args.mode)
         evaluate(dev_loc=args.test_loc,
                  max_length=args.max_length,
-                 transformer_path=args.transformer_path,
-                 transformer_type=args.transformer_type,
+                 tf_hub_path=args.bert_tf_hub_path,
                  model_path=args.model_save_path,
                  model_type=args.model_type)
 
     elif args.mode == "demo":
+        print("test mode is", args.mode)
 
         # path = "/media/ulgen/Samsung/contradiction_data_depo/results/a/data/UKPConvArg1Strict-XML/"
 
@@ -296,7 +252,7 @@ def main():
         hypothesis = "someone playing music outside"
 
         demo(max_length=args.max_length,
-             transformer_path=args.transformer_path,
+             tf_hub_path=args.bert_tf_hub_path,
              transformer_type=args.transformer_type,
              model_path=args.model_save_path,
              model_type=args.model_type,
