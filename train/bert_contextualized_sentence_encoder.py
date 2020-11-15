@@ -518,9 +518,7 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
                                              nr_hidden=nr_hidden, nr_class=nr_class,
                                              learning_rate=learning_rate, embedding_type=embedding_type)
 
-    model.summary()
-
-    es = EarlyStopping(monitor='val_acc', mode='max', verbose=1,
+    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1,
                        patience=early_stopping, restore_best_weights=True)
 
     history = model.fit(
@@ -533,8 +531,19 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
         callbacks=[es]
     )
 
+    if not os.path.isdir(model_save_path[model_type]):
+        os.mkdir(model_save_path[model_type])
+    print("Saving trained model to", model_save_path[model_type])
+
+    print('\n model history:', history.history)
+
+    model.save(model_save_path[model_type] + "model.h5")
+
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
+
+    with open(result_path + 'result_history.txt', 'w') as file:
+        file.write(str(history.history))
 
     # summarize history for accuracy
     plt.plot(history.history['acc'])
@@ -555,20 +564,6 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     plt.legend(['train', 'test'], loc='upper left')
     plt.savefig(result_path + 'loss.png', bbox_inches='tight')
     plt.show()
-
-    print('\n model history:', history.history)
-
-    if not os.path.isdir(result_path):
-        os.mkdir(result_path)
-
-    with open(result_path + 'result_history.txt', 'w') as file:
-        file.write(str(history.history))
-
-    if not os.path.isdir(model_save_path[model_type]):
-        os.mkdir(model_save_path[model_type])
-    print("Saving trained model to", model_save_path[model_type])
-
-    model.save(model_save_path[model_type] + "model.h5")
 
 
 def main():

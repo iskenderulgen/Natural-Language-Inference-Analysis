@@ -55,6 +55,8 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
 
     model = Model([input1, input2], out)
 
+    model.summary()
+
     model.compile(
         optimizer=optimizers.Adam(lr=learning_rate),
         loss="categorical_crossentropy",

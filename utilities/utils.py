@@ -26,18 +26,19 @@ pd.set_option('display.width', 2000)
 LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
 
-def set_keras_backend(backend):
-    if K.backend() != backend:
-        os.environ["KERAS_BACKEND"] = backend
-        importlib.reload(K)
-        assert K.backend() == backend
-    if backend == "tensorflow":
-        K.get_session().close()
-        cfg = K.tf.ConfigProto()
-        cfg.gpu_options.per_process_memory_fraction = 0.8
-        cfg.gpu_options.allow_growth = True
-        K.set_session(K.tf.Session(config=cfg))
-        K.clear_session()
+# def set_keras_backend(backend):
+#     if K.backend() != backend:
+#         os.environ["KERAS_BACKEND"] = backend
+#         importlib.reload(K)
+#         assert K.backend() == backend
+#     if backend == "tensorflow":
+#         K.get_session().close()
+#         cfg = K.tf.ConfigProto()
+#         #cfg.tf.compat.v1.enable_eager_execution()
+#         #cfg.gpu_options.per_process_gpu_memory_fraction = 0.5
+#         #cfg.gpu_options.allow_growth = True
+#         K.set_session(K.tf.Session(config=cfg))
+#         K.clear_session()
 
 
 def load_configurations():
