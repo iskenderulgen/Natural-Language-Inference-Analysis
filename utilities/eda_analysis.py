@@ -2,19 +2,19 @@ import argparse
 import json
 import os
 import pickle
+import statistics
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plac
-import scikit_posthocs as sp
-import scipy.stats as stats
-import statsmodels.api as sm
-from bioinfokit.analys import stat
+# import scikit_posthocs as sp
+# import scipy.stats as stats
+# import statsmodels.api as sm
+# from bioinfokit.analys import stat
+# from statsmodels.formula.api import ols
 from scipy import spatial
-from statsmodels.formula.api import ols
-
-from utilities.utils import load_configurations
+from utilities.utils import load_configurations, read_nli
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_colwidth', None)
@@ -40,6 +40,33 @@ parser.add_argument("--weights_definition", type=str, default="snli train",
                          "types of NLI sets and train/dev/test purpose of the NLI set. This will be used to swow NLI"
                          "information as plot title.")
 args = parser.parse_args()
+
+
+def nli_sets_length_distribution(nli_path, nli_definition, result_path):
+    text1, text2, _ = read_nli(path=nli_path)
+
+    text1_token_len = []
+    text2_token_len = []
+
+    for hypot, prem in zip(text1, text2):
+        text1_token_len.append(len(hypot.split(" ")))
+        text2_token_len.append(len(prem.split(" ")))
+
+    print(len(text1_token_len))
+    print(len(text2_token_len))
+    print("hypot_mean=", statistics.mean(text1_token_len))
+    print("prem_mean=", statistics.mean(text2_token_len))
+    print("max val 1", max(text1_token_len))
+    print("max val 2", max(text2_token_len))
+
+    plt.subplots(figsize=(10, 10))
+    fig1, ax1 = plt.subplots()
+    ax1.set_title(nli_definition + ' sequence length distribution')
+    plt.boxplot(x=[text1_token_len, text2_token_len], labels=['premise', 'hypothesis'],
+                manage_ticks=True, autorange=True, meanline=True)
+    plt.savefig(result_path + 'similarity.png', bbox_inches='tight')
+    plt.draw()
+    plt.show()
 
 
 def exploratory_data_analysis(weights_path, labels_path, result_path, weights_definition):
@@ -93,94 +120,97 @@ def exploratory_data_analysis(weights_path, labels_path, result_path, weights_de
     plt.show()
 
 
-def anova_analysis(result_html_path, nli_type_1, nli_type_2, nli_type_3):
-    """
-    This  function shows the model differences using the prediction results on unseen test data. function expects that
-    results html files are merged in to one file. Anova analysis takes the same label scores that acquired from three
-    different models predicted on same test data. Then conducts analysis and gives corresponding f and p scores.
-    As an example, having three models which trained with same model architecture eg. ESIM, using three different train
-    sets such as snli, snli-mnli, snli-mnli-anli. Each model conducts prediction operation on same test data. Then each
-    result html file must be merged in to one using required function from utils.
-    :param result_html_path: path of the result html file.
-    :param nli_type_1: type of the nli file which used on training the model.
-    :param nli_type_2: type of the nli file which used on training the model.
-    :param nli_type_3: type of the nli file which used on training the model.
-    :return: None
-    """
-    df1 = pd.read_html(result_html_path)
-
-    snli_model = []
-    snli_mnli_model = []
-    snli_mnli_anli_model = []
-
-    for i in range(len(df1[0])):
-        snli_model.append(df1[0][nli_type_1 + ' neutral score'][i])
-        snli_mnli_model.append(df1[0][nli_type_2 + ' neutral score'][i])
-        snli_mnli_anli_model.append(df1[0][nli_type_3 + ' neutral score'][i])
-
-    df1 = pd.DataFrame(data={'snli_model': snli_model,
-                             'snli_mnli_model': snli_mnli_model,
-                             'snli_mnli_anli_model': snli_mnli_anli_model})
-
-    print(df1.var())
-
-    fvalue, pvalue = stats.f_oneway(np.asarray(df1['snli_model']),
-                                    np.asarray(df1['snli_mnli_model']),
-                                    np.asarray(df1['snli_mnli_anli_model']))
-
-    print("Results of ANOVA test:\n The F-statistic is:", {fvalue}, "\n The p-value is:", {pvalue})
-
-    # reshape the d dataframe suitable for statsmodels package
-    d_melt = pd.melt(df1.reset_index(), id_vars=['index'], value_vars=['snli_model',
-                                                                       'snli_mnli_model',
-                                                                       'snli_mnli_anli_model'])
-
-    # replace column names
-    d_melt.columns = ['index', 'models', 'value']
-    # Ordinary Least Squares (OLS) model
-    model = ols('value ~ C(models)', data=d_melt).fit()
-    anova_table = sm.stats.anova_lm(model, typ=1)
-    print("\n#### ANOVA TABLE")
-    print(anova_table)
-
-    res = stat()
-    res.tukey_hsd(df=d_melt, res_var='value', xfac_var='models')
-    print("\n### TUKEY SHD TABLE")
-    print(res.tukey_summary)
-
-
-def sheffe_table(result_html_path, nli_type_1, nli_type_2):
-    """
-    This function suitable to use after anova analysis. sheffe analysis compares the sets which gave p score lower than
-    the threshold. Sheffe analysis shows that which of the sets that requires p score are more significant.
-    :param result_html_path: path of the result html file.
-    :param nli_type_1: type of the nli file which used on training the model.
-    :param nli_type_2: type of the nli file which used on training the model.
-    :return:
-    """
-    df1 = pd.read_html(result_html_path)
-
-    model_1 = []
-    model_2 = []
-
-    for i in range(len(df1[0])):
-        model_1.append(df1[0][nli_type_1 + ' neutral score'][i])
-        model_2.append(df1[0][nli_type_2 + ' entailment score'][i])
-
-    df2 = pd.DataFrame(data={
-        'snli_mnli_model': model_1,
-        'snli_mnli_anli_model': model_2})
-
-    print("\n### SCHEFFE TABLE")
-    df2 = df2.melt(var_name='groups', value_name='values')
-    print(sp.posthoc_scheffe(a=df2, val_col='values', group_col='groups'))
+# def anova_analysis(result_html_path, nli_type_1, nli_type_2, nli_type_3):
+#     """
+#     This  function shows the model differences using the prediction results on unseen test data. function expects that
+#     results html files are merged in to one file. Anova analysis takes the same label scores that acquired from three
+#     different models predicted on same test data. Then conducts analysis and gives corresponding f and p scores.
+#     As an example, having three models which trained with same model architecture eg. ESIM, using three different train
+#     sets such as snli, snli-mnli, snli-mnli-anli. Each model conducts prediction operation on same test data. Then each
+#     result html file must be merged in to one using required function from utils.
+#     :param result_html_path: path of the result html file.
+#     :param nli_type_1: type of the nli file which used on training the model.
+#     :param nli_type_2: type of the nli file which used on training the model.
+#     :param nli_type_3: type of the nli file which used on training the model.
+#     :return: None
+#     """
+#     df1 = pd.read_html(result_html_path)
+#
+#     snli_model = []
+#     snli_mnli_model = []
+#     snli_mnli_anli_model = []
+#
+#     for i in range(len(df1[0])):
+#         snli_model.append(df1[0][nli_type_1 + ' neutral score'][i])
+#         snli_mnli_model.append(df1[0][nli_type_2 + ' neutral score'][i])
+#         snli_mnli_anli_model.append(df1[0][nli_type_3 + ' neutral score'][i])
+#
+#     df1 = pd.DataFrame(data={'snli_model': snli_model,
+#                              'snli_mnli_model': snli_mnli_model,
+#                              'snli_mnli_anli_model': snli_mnli_anli_model})
+#
+#     print(df1.var())
+#
+#     fvalue, pvalue = stats.f_oneway(np.asarray(df1['snli_model']),
+#                                     np.asarray(df1['snli_mnli_model']),
+#                                     np.asarray(df1['snli_mnli_anli_model']))
+#
+#     print("Results of ANOVA test:\n The F-statistic is:", {fvalue}, "\n The p-value is:", {pvalue})
+#
+#     # reshape the d dataframe suitable for statsmodels package
+#     d_melt = pd.melt(df1.reset_index(), id_vars=['index'], value_vars=['snli_model',
+#                                                                        'snli_mnli_model',
+#                                                                        'snli_mnli_anli_model'])
+#
+#     # replace column names
+#     d_melt.columns = ['index', 'models', 'value']
+#     # Ordinary Least Squares (OLS) model
+#     model = ols('value ~ C(models)', data=d_melt).fit()
+#     anova_table = sm.stats.anova_lm(model, typ=1)
+#     print("\n#### ANOVA TABLE")
+#     print(anova_table)
+#
+#     res = stat()
+#     res.tukey_hsd(df=d_melt, res_var='value', xfac_var='models')
+#     print("\n### TUKEY SHD TABLE")
+#     print(res.tukey_summary)
+#
+#
+# def sheffe_table(result_html_path, nli_type_1, nli_type_2):
+#     """
+#     This function suitable to use after anova analysis. sheffe analysis compares the sets which gave p score lower than
+#     the threshold. Sheffe analysis shows that which of the sets that requires p score are more significant.
+#     :param result_html_path: path of the result html file.
+#     :param nli_type_1: type of the nli file which used on training the model.
+#     :param nli_type_2: type of the nli file which used on training the model.
+#     :return:
+#     """
+#     df1 = pd.read_html(result_html_path)
+#
+#     model_1 = []
+#     model_2 = []
+#
+#     for i in range(len(df1[0])):
+#         model_1.append(df1[0][nli_type_1 + ' neutral score'][i])
+#         model_2.append(df1[0][nli_type_2 + ' entailment score'][i])
+#
+#     df2 = pd.DataFrame(data={
+#         'snli_mnli_model': model_1,
+#         'snli_mnli_anli_model': model_2})
+#
+#     print("\n### SCHEFFE TABLE")
+#     df2 = df2.melt(var_name='groups', value_name='values')
+#     print(sp.posthoc_scheffe(a=df2, val_col='values', group_col='groups'))
 
 
 def main():
-    exploratory_data_analysis(weights_path=args.weights_path,
-                              labels_path=args.labels_path,
-                              result_path=args.result_path,
-                              weights_definition=args.weights_definition)
+    # exploratory_data_analysis(weights_path=args.weights_path,
+    #                           labels_path=args.labels_path,
+    #                           result_path=args.result_path,
+    #                           weights_definition=args.weights_definition)
+
+    nli_sets_length_distribution(nli_path="/media/ulgen/Samsung/contradiction_data_depo/NLI_sets/ANLI/train.jsonl",
+                                 nli_definition="train", result_path=args.result_path)
 
 
 if __name__ == "__main__":
