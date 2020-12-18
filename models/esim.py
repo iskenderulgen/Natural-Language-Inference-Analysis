@@ -1,34 +1,19 @@
 from tensorflow.keras import backend as K
 from tensorflow.keras import layers, Model, optimizers, models
-from tensorflow.keras.layers import Bidirectional, CuDNNLSTM
+from tensorflow.keras.layers import Bidirectional, LSTM
 
 
-def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate, embedding_type):
-    input1, input2, x1, x2 = None, None, None, None
+def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate):
+    bilstm1 = Bidirectional(LSTM(nr_hidden, return_sequences=True))
+    bilstm2 = Bidirectional(LSTM(nr_hidden, return_sequences=True))
 
-    bilstm1 = Bidirectional(CuDNNLSTM(nr_hidden, return_sequences=True))
-    bilstm2 = Bidirectional(CuDNNLSTM(nr_hidden, return_sequences=True))
+    input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
+    input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
 
-    if embedding_type == 'word':
-        input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
-        input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
+    embed = word_embedding_layer(vectors, max_length)
 
-        embed = word_embedding_layer(vectors, max_length)
-
-        x1 = embed(input1)
-        x2 = embed(input2)
-
-    elif embedding_type == 'sentence':
-        input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
-        input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
-
-        embed = sentence_embedding_layer()
-
-        x1 = embed(input1)
-        x2 = embed(input2)
-
-    else:
-        print("unknown embedding type, Embedding type can only be 'word' or 'sentence' ")
+    x1 = embed(input1)
+    x2 = embed(input2)
 
     x1 = bilstm1(x1)
     x2 = bilstm1(x2)
@@ -75,16 +60,6 @@ def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate, e
     )
 
     return model
-
-
-def sentence_embedding_layer():
-    return models.Sequential(
-        [
-            layers.Reshape(
-                (1, 1024), input_shape=(1024,)
-            ),
-        ]
-    )
 
 
 def word_embedding_layer(vectors, max_length):

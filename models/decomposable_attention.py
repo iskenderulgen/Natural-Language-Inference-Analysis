@@ -2,30 +2,14 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers, Model, models, optimizers
 
 
-def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learning_rate, embedding_type):
-    input1, input2, x1, x2 = None, None, None, None
+def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learning_rate):
+    input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
+    input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
 
-    if embedding_type == "word":
-        input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
-        input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
+    embed = word_embedding_layer(vectors, max_length)
 
-        embed = word_embedding_layer(vectors, max_length)
-
-        x1 = embed(input1)
-        x2 = embed(input2)
-
-    elif embedding_type == "sentence":
-
-        input1 = layers.Input(shape=(max_length,), dtype="float32", name="sentence1")
-        input2 = layers.Input(shape=(max_length,), dtype="float32", name="sentence2")
-
-        bert = sentence_embedding_layer()
-
-        x1 = bert(input1)
-        x2 = bert(input2)
-
-    else:
-        print("unknown embedding type, embedding type can only be 'word' or 'sentence' ")
+    x1 = embed(input1)
+    x2 = embed(input2)
 
     # step 1: attend
     F = create_feedforward(num_units=nr_hidden)
@@ -64,16 +48,6 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
     )
 
     return model
-
-
-def sentence_embedding_layer():
-    return models.Sequential(
-        [
-            layers.Reshape(
-                (1, 1024), input_shape=(1024,)
-            ),
-        ]
-    )
 
 
 def word_embedding_layer(vectors, max_length):
