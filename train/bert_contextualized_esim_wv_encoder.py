@@ -2,7 +2,6 @@ import argparse
 import os
 
 import matplotlib.pyplot as plt
-import numpy as np
 import plac
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -12,30 +11,28 @@ from tensorflow.keras import layers, Model, optimizers
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import Bidirectional, LSTM
 from tensorflow.keras.layers import Input
-from utilities.utils import read_nli, load_configurations
+from utilities.utils import read_nli, load_configurations, set_memory_growth
 
+set_memory_growth()
 configs = load_configurations()
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_type", type=str, default="esim",
-                    help="Type of the model that will be trained. "
-                         "for ESIM model type 'esim' "
-                         "for decomposable attention model type 'decomposable_attention'. ")
+                    help="Type of the model architecture that model is trained on. Contextualized word embeddings"
+                         "are only used with ESIM model. This parameter takes only ESIM option")
 
-parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
-                    help="transformer model path which will convert the text in to word-ids and vectors. "
-                         "Transformer path has four sub paths. transformer_type will load the desired nlp object.")
+parser.add_argument("--bert_tf_hub_path", type=str, default=configs["transformer_paths"]["tf_hub_path"],
+                    help="imports bert tensorflow-hub model")
 
 parser.add_argument("--train_loc", type=str, default=configs["nli_set_train"],
-                    help="Train data location which will be processed via transformers and saved to 'processed_path'"
-                         "location.")
+                    help="Train data location which will be processed with BERT Tf-Hub and fed in to downstream task.")
 
 parser.add_argument("--dev_loc", type=str, default=configs["nli_set_dev"],
                     help="Train dev data location which will be used to measure train accuracy while training model,"
-                         "files will be processed using transformer and saved to 'processed_path' location.")
+                         "files will be processed with BERT Tf-Hub and fed in to downstream task.")
 
 parser.add_argument("--max_length", type=str, default=configs["max_length"],
-                    help="Max length of the sentences, longer sentences will be pruned and shorter ones will be padded"
-                         "Remember longer sentences means longer sequences to train. Select best length based"
+                    help="Max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
+                         "padded. longer sentences means longer sequences to train. Select best length based"
                          "on your rig.")
 
 parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
@@ -45,28 +42,37 @@ parser.add_argument("--batch_size", type=int, default=configs["batch_size"],
                     help="Batch size of model, it represents the amount of data the model will train for each pass.")
 
 parser.add_argument("--nr_epoch", type=int, default=configs["nr_epoch"],
-                    help="Total number of times that model will iterate trough the data.")
+                    help="Total number of times that model will iterate trough whole data.")
 
 parser.add_argument("--nr_hidden", type=int, default=configs["nr_hidden"],
                     help="Hidden neuron size of the model")
 
 parser.add_argument("--nr_class", type=int, default=configs["nr_class"],
-                    help="Number of class that will model classify the data into. Also represents the last layer of"
+                    help="Number of classes that will model classify the data into. Also represents the last layer of"
                          "the model.")
 
 parser.add_argument("--learning_rate", type=float, default=configs["learn_rate"],
-                    help="Learning rate parameter that represents the constant which will be multiplied with the data"
-                         "in each back propagation")
+                    help="Learning rate parameter which will update the weights during training on back propagation")
 
 parser.add_argument("--result_path", type=str, default=configs["results"],
-                    help="path where trained model loss and accuracy graphs will be saved.")
+                    help="path of the folder where trained model loss and accuracy graphs will be saved.")
 
 parser.add_argument("--early_stopping", type=int, default=configs["early_stopping"],
                     help="early stopping parameter for model, which stops training when reaching best accuracy.")
 args = parser.parse_args()
 
 
-def bert_encode(texts, tokenizer, max_len):
+def bert_encode(texts, tokenizer, max_length):
+    """
+    Bert requires special pre-processing before feeding information to BERT model. Each text must be converted into
+    token_id, pad_mask and segment ids. Bert takes three inputs as described and converts text in to contextualized
+    word embeddings.
+    :param texts: opinion sentence
+    :param tokenizer: Bert tokenizer object
+    :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
+    :return: token_ids, masks, segments_ids.
+    """
+
     all_tokens = []
     all_masks = []
     all_segments = []
@@ -74,24 +80,35 @@ def bert_encode(texts, tokenizer, max_len):
     for text in texts:
         text = tokenizer.tokenize(text)
 
-        text = text[:max_len - 2]
+        text = text[:max_length - 2]
         input_sequence = ["[CLS]"] + text + ["[SEP]"]
-        pad_len = max_len - len(input_sequence)
+        pad_len = max_length - len(input_sequence)
 
         tokens = tokenizer.convert_tokens_to_ids(input_sequence)
         tokens += [0] * pad_len
         pad_masks = [1] * len(input_sequence) + [0] * pad_len
-        segment_ids = [0] * max_len
+        segment_ids = [0] * max_length
 
         all_tokens.append(tf.convert_to_tensor(tokens))
         all_masks.append(tf.convert_to_tensor(pad_masks))
         all_segments.append(tf.convert_to_tensor(segment_ids))
 
-    print(np.asarray(all_tokens).shape)
     return all_tokens, all_masks, all_segments
 
 
 def esim_model(bert_layer, max_length, nr_hidden, nr_class, learning_rate):
+    """
+    ESIM - Enhanced Sequential Inference Model. ESIM architecture trains a language inference model to classify premise
+    and hypothesis pairs. ESIM uses chain LSTM approach to create robust NLI model. LSTMs are initialized as
+    Bidirectional, thus enables model to preserver information in left-to-right and right-to-left directions.
+    :param bert_layer: BERT tensorflow-hub keras-layer module.
+    :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
+    :param nr_hidden: hidden neuron size of the model.
+    :param nr_class: number of classed that model will classify into. Also the last layer of the model.
+    :param learning_rate: learning rate parameter which will update the weights during training on back propagation.
+    :return: NLI model architecture.
+    """
+
     bilstm1 = Bidirectional(LSTM(nr_hidden, return_sequences=True))
     bilstm2 = Bidirectional(LSTM(nr_hidden, return_sequences=True))
 
@@ -155,11 +172,24 @@ def esim_model(bert_layer, max_length, nr_hidden, nr_class, learning_rate):
     return model
 
 
-def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
-                nr_hidden, nr_class, learning_rate, early_stopping,
-                result_path):
-    bert_path = "/media/ulgen/Samsung/contradiction_data_depo/transformers/tf_hub"
-    bert_layer = hub.KerasLayer(bert_path, trainable=False)
+def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch, nr_hidden, nr_class, learning_rate,
+                early_stopping, result_path):
+    """
+    Model will be trained in this function. Contextualized word embeddings are only used with ESIM.
+    :param model_save_path: path where the model will be saved as h5 file.
+    :param model_type: type of the model. Contextualized BERT only used with ESIM
+    :param max_length: max length of the sentence / sequence.
+    :param batch_size: size of the train data which will be feed forwarded on each iteration.
+    :param nr_epoch: total number of times the model iterates trough all the training data.
+    :param nr_hidden: hidden neuron size of the model
+    :param nr_class: number of classes that model will classify given pairs. Also the last layer of the model.
+    :param learning_rate: learning rate parameter which will update the weights during training on back propagation.
+    :param early_stopping: parameter that stops the training when the validation accuracy cant go higher.
+    :param result_path: path where accuracy and loss graphs will be saved along with the model history.
+    :return: None
+    """
+
+    bert_layer = hub.KerasLayer(handle=args.bert_tf_hub_path, trainable=False)
 
     train_texts1, train_texts2, train_labels = read_nli(args.train_loc)
     dev_texts1, dev_texts2, dev_labels = read_nli(args.dev_loc)
@@ -168,36 +198,34 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
     do_lower_case = bert_layer.resolved_object.do_lower_case.numpy()
     tokenizer = tokenization.FullTokenizer(vocab_file, do_lower_case)
 
-    train_all_tokens1, train_all_masks1, train_all_segments1 = bert_encode(train_texts1, tokenizer, max_len=max_length)
-    print(np.asarray(train_all_tokens1).shape)
+    train_tokens1, train_masks1, train_segments1 = bert_encode(train_texts1, tokenizer, max_length=max_length)
+    train_tokens2, train_masks2, train_segments2 = bert_encode(train_texts2, tokenizer, max_length=max_length)
 
-    train_all_tokens2, train_all_masks2, train_all_segments2 = bert_encode(train_texts2, tokenizer, max_len=max_length)
-
-    dev_all_tokens1, dev_all_masks1, dev_all_segments1 = bert_encode(dev_texts1, tokenizer, max_len=max_length)
-    dev_all_tokens2, dev_all_masks2, dev_all_segments2 = bert_encode(dev_texts2, tokenizer, max_len=max_length)
+    dev_tokens1, dev_masks1, dev_segments1 = bert_encode(dev_texts1, tokenizer, max_length=max_length)
+    dev_tokens2, dev_masks2, dev_segments2 = bert_encode(dev_texts2, tokenizer, max_length=max_length)
 
     model = esim_model(bert_layer=bert_layer, max_length=max_length, nr_hidden=nr_hidden, nr_class=nr_class,
                        learning_rate=learning_rate)
 
-    es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1,
+    es = EarlyStopping(monitor='val_loss', mode='min', verbose=1,
                        patience=early_stopping, restore_best_weights=True)
 
     model.summary()
 
-    history = model.fit([train_all_tokens1,
-                         train_all_masks1,
-                         train_all_segments1,
-                         train_all_tokens2,
-                         train_all_masks2,
-                         train_all_segments2],
+    history = model.fit([train_tokens1,
+                         train_masks1,
+                         train_segments1,
+                         train_tokens2,
+                         train_masks2,
+                         train_segments2],
                         train_labels,
                         validation_data=(
-                            [dev_all_tokens1,
-                             dev_all_masks1,
-                             dev_all_segments1,
-                             dev_all_tokens2,
-                             dev_all_masks2,
-                             dev_all_segments2], dev_labels),
+                            [dev_tokens1,
+                             dev_masks1,
+                             dev_segments1,
+                             dev_tokens2,
+                             dev_masks2,
+                             dev_segments2], dev_labels),
                         epochs=nr_epoch,
                         batch_size=batch_size,
                         verbose=1,
@@ -239,26 +267,6 @@ def train_model(model_save_path, model_type, max_length, batch_size, nr_epoch,
 
 
 def main():
-    # gpus = tf.config.experimental.list_physical_devices('GPU')
-    # if gpus:
-    #     try:
-    #         tf.config.experimental.set_virtual_device_configuration(gpus[0], [
-    #             tf.config.experimental.VirtualDeviceConfiguration(memory_limit=+)])
-    #     except RuntimeError as e:
-    #         print(e)
-
-    # gpus = tf.config.experimental.list_physical_devices('GPU')
-    # if gpus:
-    #     try:
-    #         # Currently, memory growth needs to be the same across GPUs
-    #         for gpu in gpus:
-    #             tf.config.experimental.set_memory_growth(gpu, True)
-    #         logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-    #         print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-    #     except RuntimeError as e:
-    #         # Memory growth must be set before GPUs have been initialized
-    #         print(e)
-
     train_model(model_save_path=args.model_save_path,
                 model_type=args.model_type,
                 max_length=args.max_length,
