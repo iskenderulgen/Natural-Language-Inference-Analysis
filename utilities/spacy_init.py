@@ -55,15 +55,15 @@ DEFAULT_OOV_PROB = -20
 )
 def init_model(
         lang='en',
-        output_dir='/media/ulgen/Samsung/contradiction_data/fasttext/',
+        output_dir="/media/ulgen/Samsung/contradiction_data/transformers/word2vec/",
         freqs_loc=None,
         clusters_loc=None,
         jsonl_loc=None,
-        vectors_loc='/home/ulgen/Downloads/crawl-300d-2M.vec.zip',
+        vectors_loc='/home/ulgen/Downloads/GoogleNews-vectors-negative300.txt',
         truncate_vectors=0,
         prune_vectors=685000,
         vectors_name=None,
-        model_name='fasttext',
+        model_name='word2vec',
         omit_extra_lookups=False,
         base_model=None,
 ):
@@ -116,8 +116,7 @@ def init_model(
         "Sucessfully compiled vocab",
         "{} entries, {} vectors".format(lex_added, vec_added),
     )
-    if not output_dir.exists():
-        output_dir.mkdir()
+
     nlp.to_disk(output_dir)
     return nlp
 
@@ -134,9 +133,10 @@ def open_file(loc):
         names = zip_file.namelist()
         file_ = zip_file.open(names[0])
         return (line.decode("utf8") for line in file_)
+    # bin file represents the word2vec google news dataset. Use only for google news set.
     elif loc.parts[-1].endswith("bin"):
         model = KeyedVectors.load_word2vec_format(loc, binary=True)
-        loc = loc.replace('GoogleNews-vectors-negative300.bin', 'googlenews.txt')
+        loc = loc.with_suffix('.txt')
         model.wv.save_word2vec_format(loc)
         return loc.open("r", encoding="utf8")
     else:
