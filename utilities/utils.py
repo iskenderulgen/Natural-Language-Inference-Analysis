@@ -5,7 +5,7 @@ import os
 import pickle
 import xml.etree.ElementTree as ET
 from pathlib import Path
-
+import tensorflow as tf
 import en_core_web_lg
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,8 +14,8 @@ import plac
 import seaborn as sns
 import spacy
 import yaml
-from keras import backend as K
-from keras.utils import to_categorical
+
+from tensorflow.keras.utils import to_categorical
 
 """Pandas show non-truncated results"""
 pd.option_context('display.max_rows', None)
@@ -26,19 +26,23 @@ pd.set_option('display.width', 2000)
 LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
 
-# def set_keras_backend(backend):
-#     if K.backend() != backend:
-#         os.environ["KERAS_BACKEND"] = backend
-#         importlib.reload(K)
-#         assert K.backend() == backend
-#     if backend == "tensorflow":
-#         K.get_session().close()
-#         cfg = K.tf.ConfigProto()
-#         #cfg.tf.compat.v1.enable_eager_execution()
-#         #cfg.gpu_options.per_process_gpu_memory_fraction = 0.5
-#         #cfg.gpu_options.allow_growth = True
-#         K.set_session(K.tf.Session(config=cfg))
-#         K.clear_session()
+def set_memory_growth():
+    """
+    This function sets memory growth for tensorflow. With TF2, it is optimized to use graphic memory efficiently.
+    TF2 only allocates the required size and releases the rest.
+    :return: None
+    """
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
 
 
 def load_configurations():
@@ -74,6 +78,7 @@ def read_nli(path):
             texts1.append(nli_data["sentence1"])
             texts2.append(nli_data["sentence2"])
             labels.append(LABELS[label])
+
     print("NLI dataset loaded")
     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
@@ -90,23 +95,14 @@ def load_spacy_nlp(transformer_path, transformer_type):
 
     if transformer_type == 'glove':
         print("Loading Glove Vectors")
-        spacy.prefer_gpu()
-        gpu = spacy.require_gpu()
-        print("GPU:", gpu)
         nlp = en_core_web_lg.load()
 
     elif transformer_type == 'fasttext':
-        print("Loading fasttext Vectors")
-        spacy.prefer_gpu()
-        gpu = spacy.require_gpu()
-        print("GPU:", gpu)
+        print("Loading Fasttext Vectors")
         nlp = spacy.load(transformer_path[transformer_type])
 
     elif transformer_type == 'word2vec':
-        print("Loading word2vec Vectors")
-        spacy.prefer_gpu()
-        gpu = spacy.require_gpu()
-        print("GPU:", gpu)
+        print("Loading Word2Vec Vectors")
         nlp = spacy.load(transformer_path[transformer_type])
 
     """shows the unique vector size/count."""
@@ -116,9 +112,9 @@ def load_spacy_nlp(transformer_path, transformer_type):
 
 def attention_visualization(tokens1, tokens2, attention1, attention2, results_path, transformer_type):
     """
-    Function to draw attention heatmap of the prediction scores. Takes two sentences and their attention values
-    corresponding to their tokens. Then dot products the scores to achieve attention scores and draws them to a
-    graph. Note that it only takes the real tokens and their attention values not the padded scores.
+    Function to draw attention heatmap of the prediction scores. Takes two sentence tokens and their attention values
+    corresponding to their tokens. Dot products the scores to achieve attention scores and draws them to a graph.
+    Note that it only takes the real tokens and their attention values not the padded scores.
     :param tokens1: tokens of the sentence one.
     :param tokens2: tokens of the sentence two.
     :param attention1: attention scores of the first sentence.
@@ -139,7 +135,7 @@ def attention_visualization(tokens1, tokens2, attention1, attention2, results_pa
 
     plt.subplots(figsize=(20, 20))
 
-    ax = sns.heatmap(attentions_scores.reshape((sentence1_length, sentence2_length)), linewidths=0.5, annot=False,
+    ax = sns.heatmap(attentions_scores.reshape((sentence1_length, sentence2_length)), linewidths=0.5, annot=True,
                      cbar=True, cmap="Blues")
 
     ax.set_yticklabels([i for i in tokens1])
@@ -156,7 +152,7 @@ def attention_visualization(tokens1, tokens2, attention1, attention2, results_pa
 def predictions_to_html(nli_type, premises, hypothesises, prediction, contradiction_score, neutral_score,
                         entailment_score, result_path):
     """
-    Writes prediction results to html file as table. This method provides easy to see approach for test results.
+    Writes the prediction results to html file as table. This method provides easy to see approach for test results.
     Takes premise - hypothesis and their prediction label along with scores for each label.
     :param nli_type: Definition of the NLI train set which the model trained on.
     :param premises: opinion sentence
@@ -174,12 +170,12 @@ def predictions_to_html(nli_type, premises, hypothesises, prediction, contradict
     predictions_df = pd.DataFrame(
         data={'premise': premises,
               'hypothesis': hypothesises,
-              nli_type + ' prediction': prediction,
-              nli_type + ' contradiction score': contradiction_score,
-              nli_type + ' neutral score': neutral_score,
-              nli_type + ' entailment score': entailment_score}
+              nli_type + ' model prediction': prediction,
+              nli_type + ' model contradiction score': contradiction_score,
+              nli_type + ' model neutral score': neutral_score,
+              nli_type + ' model entailment score': entailment_score}
     )
-    html = predictions_df.to_html(float_format=lambda x: '%.3f' % x)
+    html = predictions_df.to_html(float_format=lambda x: ('%.3f' % x) * 100)
     text_file = open(result_path + nli_type + ".html", "w")
     text_file.write(html)
     text_file.close()
@@ -187,11 +183,11 @@ def predictions_to_html(nli_type, premises, hypothesises, prediction, contradict
 
 def merge_result_html_files(path_of_the_files):
     """
-    This function merges the result html files and suitable for the one model architecture trained on different train
-    data. Train data can be different or combination of train sets. Merging result files give researcher the better
+    This function merges the result html files. This is suitable to compare models that are trained on different train
+    sets. Train data can be different or combination of train sets. Merging result files give researcher the better
     insights about how the model behaves when trained on different train sets. Eg. model architecture is ESIM and train
-    sets can be snli, snli-mnli, anli etc. Function takes premise and hypothesis as frozen index / columns and concat
-    the prediction results.
+    sets can be snli, snli-mnli, anli etc. Best use-case is making predictions using different models on same test data
+    thus gives better understanding how different model behaves on same test data.
     :param path_of_the_files: path of the results to be merges.
     :return: None
     """
@@ -240,6 +236,9 @@ def merge_result_html_files(path_of_the_files):
 
 def find_differences(html_results_main_path, df1_set_definer, df2_set_definer, df3_set_definer):
     """
+
+    TO DO: Automatize this function so that it can work regardless of the given input size
+
     This function is hard coded and doesn't provide any modular structure. This function will be reworked to provide
     comparison regardless of the dataframe size. Right now this function provides result only for three different
     result files.
@@ -318,31 +317,63 @@ def find_differences(html_results_main_path, df1_set_definer, df2_set_definer, d
     text_file.close()
 
 
-def xml_test_file_reader(path):
+def xml_data_extractor(path, arg_number):
     """
-    Reads the XML based paired data. Original data acquired from the research named:
-    'What makes a convincing argument? Empirical analysis and
-     detecting attributes of convincingness in Web argumentation'
-     Data is paired opinion sentences around 16 types of topic. It can present contradiction and entailment paris
-     based on the selection of the data.
+    Reads the XML file and extracts the desired data.
     :param path: path of the XML file.
-    :return: list of the paired sentences.
+    :param arg_number: XML root-tree argument number parameter.
+    :return: argument text data
     """
     tree = ET.parse(path)
     root = tree.getroot()
+    arg_text = []
+    for item in root.findall('annotatedArgumentPair/' + arg_number):
+        text = item.find('text').text
+        arg_text.append(str(text).replace("\n", " "))
 
-    def find_text_in_tree(arg_number):
-        arg_text = []
-        for item in root.findall('annotatedArgumentPair/' + arg_number):
-            text = item.find('text').text
-            arg_text.append(text.replace("\n", " "))
+    return arg_text
 
-        return arg_text
 
-    arg1_text = find_text_in_tree(arg_number='arg1')
-    arg2_text = find_text_in_tree(arg_number='arg2')
+def xml_data_to_json(path1, path2, nli_type):
+    """
+    Creates NLI unlabeled test JSONL data. Original data acquired from the research named:
+    'What makes a convincing argument? Empirical analysis and
+     detecting attributes of convincingness in Web argumentation'
+     Data is paired opinion sentences around 16 types of topic. It can present contradiction and entailment pairs
+     based on the selection of the data.
+    :param path1: path of the data that contains topic1's sentences.
+    :param path2: path of the data that contains topic2's sentences
+    :param nli_type: Contradiction or Entailment. Extracted sentences will be utilized based on this selection in
+    order to provide whether 'contradiction' or 'entailment' based unlabeled test data.
+    :return: None
+    """
 
-    return arg1_text, arg2_text
+    path = ('/'.join(Path(path1).parts[:-1]) + '/new_' + nli_type + '.jsonl')
+
+    topic1_arg1_text = xml_data_extractor(path=path1, arg_number='arg1')
+    topic1_arg2_text = xml_data_extractor(path=path1, arg_number='arg2')
+
+    topic2_arg1_text = xml_data_extractor(path=path2, arg_number='arg1')
+    topic2_arg2_text = xml_data_extractor(path=path2, arg_number='arg2')
+
+    if nli_type == 'entailment':
+
+        with open(path, "w") as outfile:
+            entailment_premises = topic1_arg1_text + topic2_arg1_text
+            entailment_hypothesises = topic1_arg2_text + topic2_arg2_text
+
+            for text1, text2 in zip(entailment_premises, entailment_hypothesises):
+                data = {'premise': text1, 'hypothesis': text2}
+                outfile.write(json.dumps(data) + "\n")
+
+    else:
+        with open(path, "w") as outfile:
+            contradiction_premises = topic1_arg1_text + topic1_arg2_text
+            contradiction_hypothesises = topic2_arg1_text + topic2_arg2_text
+
+            for text1, text2 in zip(contradiction_premises, contradiction_hypothesises):
+                data = {'premise': text1, 'hypothesis': text2}
+                outfile.write(json.dumps(data) + "\n")
 
 
 def write_nli_to_disk(data, nli_set_path, nli_definition):
@@ -356,7 +387,7 @@ def write_nli_to_disk(data, nli_set_path, nli_definition):
     """
     path = ('/'.join(Path(nli_set_path).parts[:-1]) + '/new_' + nli_definition + '.jsonl')
 
-    with open(path, "w") as outfile:
+    with open(path, "a") as outfile:
         for line in data:
             outfile.write(json.dumps(line) + "\n")
 
@@ -364,8 +395,7 @@ def write_nli_to_disk(data, nli_set_path, nli_definition):
 def anli_to_snli(nli_set_path, nli_definition):
     """
     Converts ANLI dataset to SNLI format. anli uses different label structure. this code converts them to SNLI format.
-    anli has 3 dataset named R1 - R2 - R3. if one wants to have total ANLI dataset, use merge function to merge all
-    three set to achieve ANLI dataset.
+    anli has 3 dataset named R1 - R2 - R3. To achieve ANLI dataset, use merge function to merge all three sets.
     :param nli_set_path: path of the nli. this path is used for both existing and new nli set.
     :param nli_definition: definition of the nli set. 'train' - 'dev' - 'test'.
     :return: None
@@ -376,8 +406,8 @@ def anli_to_snli(nli_set_path, nli_definition):
         for line in file_:
             data = {}
             eg = json.loads(line)
-            data["sentence1"] = (eg["context"])
-            data["sentence2"] = (eg["hypothesis"])
+            data["sentence1"] = str(eg["context"])
+            data["sentence2"] = str(eg["hypothesis"])
             if eg["label"] == "n":
                 data["gold_label"] = "neutral"
             elif eg["label"] == "c":
@@ -407,9 +437,9 @@ def mnli_to_snli(nli_set_path):
             label = eg["gold_label"]
             if label == "-":  # ignore - MNLI entries
                 continue
-            data["sentence1"] = (eg["sentence1"])
-            data["sentence2"] = (eg["sentence2"])
-            data["gold_label"] = eg["gold_label"]
+            data["sentence1"] = str(eg["sentence1"])
+            data["sentence2"] = str(eg["sentence2"])
+            data["gold_label"] = str(eg["gold_label"])
             total_data.append(data)
 
     write_nli_to_disk(data=total_data[0:10000], nli_set_path=nli_set_path, nli_definition="test")
@@ -420,8 +450,8 @@ def mnli_to_snli(nli_set_path):
 def merge_snli_style_sets(nli_set_path, nli_definition):
     """
     Merges all nli set that found in the path. Beware, all the sets must be converted to snli format before merging.
-    Function reads all data sequentially and merges them, saves as snli format. This approach usually used to see
-    the model behaviour when trained on all nli sets. When sets are merged it will be written to parent folder dur to
+    Function reads all data sequentially and merges, saves as snli format. This approach usually used to see
+    the model behaviour when trained with all nli sets. When sets are merged it will be written to parent folder due to
     the behaviour of 'write_nli_to_disk' function.
     :param nli_set_path: folder path of the nli sets.
     :param nli_definition: train - test - dev definition of the nli data. saves the merged set based on this definer.
@@ -436,9 +466,9 @@ def merge_snli_style_sets(nli_set_path, nli_definition):
                 label = eg["gold_label"]
                 if label == "-":  # ignore - SNLI entries
                     continue
-                data["sentence1"] = (eg["sentence1"])
-                data["sentence2"] = (eg["sentence2"])
-                data["gold_label"] = eg["gold_label"]
+                data["sentence1"] = str(eg["sentence1"])
+                data["sentence2"] = str(eg["sentence2"])
+                data["gold_label"] = str(eg["gold_label"])
                 total_data.append(data)
 
     write_nli_to_disk(data=total_data, nli_set_path=nli_set_path, nli_definition=nli_definition)
@@ -450,7 +480,7 @@ def convert_glove_tokens_weights(glove_path):
     create word-id matrix for embedding layer. After having token-id vector, one can feed those files to keras
     embedding layer to train network. When creating token-id matrix, to get the id from dictionary
     use 'vocab.get(token.text)'. With newest enhancements, we recommend using spacy module to create NLP objects
-    and create token-id matrix.
+    and extract token-id matrix.
     :param glove_path: glove file path.
     :return: None
     """
@@ -507,10 +537,11 @@ def label_comparison(human_label_path, model_result_path, nli_type):
 
 def main():
     """
-    NLI files manipulations can be handled using utilities main.
+    NLI file manipulation and other needs can be carried out using utils function set. Define the function in main
+    and run.
     :return: None
     """
-    merge_snli_style_sets(nli_set_path="/home/ulgen/Downloads/aa", nli_definition="train")
+    merge_snli_style_sets(nli_set_path="/home/ulgen/Downloads/anli_raw/train",nli_definition="train")
 
 
 if __name__ == "__main__":
