@@ -11,67 +11,61 @@ from tensorflow.keras import Model
 from tensorflow.keras.models import load_model
 
 from utilities.utils import read_nli, load_spacy_nlp, attention_visualization, load_configurations, \
-    xml_test_file_reader, \
-    predictions_to_html
+    predictions_to_html, set_memory_growth
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
-
+set_memory_growth()
 configs = load_configurations()
 parser = argparse.ArgumentParser()
-parser.add_argument("--mode", type=str, default="demo",
+parser.add_argument("--mode", type=str, default="evaluate",
                     help="This argument is to select whether to carry out 'evaluate' or 'demo' operation. Evaluate"
                          "operation takes labeled test data and measures the accuracy of the model. Demo operation"
-                         "is for comparing unlabeled data. Demo support two individual sentences or list of sentences"
+                         "is for real-life usage. Demo support two individual sentence or list of sentences"
                          "as input data.")
 
 parser.add_argument("--nli_type", type=str, default="snli",
                     help="This parameter defines the train data which the model trained on. By specifying this"
-                         "one can see the model behaviour based on trained data on prediction time. There are 4 main "
-                         "nli dataset 'snli', 'mnli', 'anli', 'fewer'. One can combine each of these according to"
-                         "their needs. Specify this by hand based on the model you will use on prediction time.If you"
+                         "one can see the model behaviour based on trained data on prediction time. There are 3 main "
+                         "nli dataset 'snli', 'mnli', 'anli'. One can combine each of these according to their needs."
+                         "Specify this by hand, based on the model you will use on prediction time. If you"
                          "combine train sets, dont use underline to define combination. Send parameter with one blank"
                          "space. It will shorten the html cell size. For example 'snli mnli' for combination of snli "
                          "and mnli train sets.")
 
+parser.add_argument("--transformer_type", type=str, default="word2vec",
+                    help="Type of the transformer which will convert texts in to word-ids. Currently three types "
+                         "are supported. Here the types as follows 'glove' -  'fasttext' - 'word2vec'.")
+
 parser.add_argument("--model_type", type=str, default="esim",
                     help="Type of the model that will be trained. "
                          "for ESIM model type 'esim' "
-                         "for decomposable attention model type 'decomposable_attention'. ")
+                         "for Decomposable Attention model type 'decomposable_attention'. ")
 
 parser.add_argument("--visualization", type=bool, default=True,
                     help="shows attention heatmaps between two opinion sentences, best used with single"
-                         "premise- hypothesis opinion sentences.")
-
-parser.add_argument("--transformer_type", type=str, default="glove",
-                    help="Type of the transformer which will convert texts in to word-ids. Currently three types "
-                         "are supported.Here the types as follows 'glove' -  'fasttext' - 'word2vec'."
-                         "Pick one you'd like to transform into")
+                         "premise- hypothesis opinion sentence.")
 
 parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
-                    help="Main transformer model path which will convert the text in to word-ids and vectors. "
+                    help="Main transformer model path which will convert the text in to word-ids and vectors."
                          "transformer path has four sub paths, load_nlp module will carry out the sub model paths"
                          "based on transformer_type selection")
 
 parser.add_argument("--max_length", type=str, default=configs["max_length"],
                     help="Max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
-                         "padded. Remember longer sentences means longer sequences to train. Select best length based"
+                         "padded. longer sentences means longer sequences to train. Select best length based"
                          "on your rig.")
 
 parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
                     help="The path where trained NLI model is saved.")
 
 parser.add_argument("--result_path", type=str, default=configs["results"],
-                    help="path of the file where results and graphs will be saved.")
+                    help="path of the folder where results and graphs will be saved.")
 
 parser.add_argument("--nr_unk", type=int, default=configs["nr_unk"],
                     help="number of unknown vectors which will be used for padding the short sentences to desired"
-                         "length.Nr unknown vectors will be created using random module")
+                         "length. Nr unknown vectors will be created using random module")
 
 parser.add_argument("--test_loc", type=str, default=configs["nli_set_test"],
-                    help="Test data location which will be used to measure the evaluation accuracy,")
+                    help="Test data location which will be used to measure the accuracy of the model")
 args = parser.parse_args()
 
 entailment_types = ["entailment", "contradiction", "neutral"]
@@ -135,7 +129,7 @@ class SpacyPrediction(object):
 
 def evaluate(dev_loc, max_length, transformer_path, transformer_type, model_path, model_type):
     """
-    This function is to measure model accuracy, it takes labeled test NLI data and performs model test on it.
+    This function is to measure the model accuracy, it takes labeled test NLI data and performs model test on it.
     :param dev_loc: labeled test data location.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
     :param transformer_path: path of the transformer nlp object.
@@ -170,7 +164,7 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
          max_length, attention_map, result_path, nli_type):
     """
     Performs demo operation using trained NLI model. Either takes two strings or list of strings and compares the
-    premise - hypothesis pairwise and returns the NLI result.
+    premise - hypothesis pairs and returns the NLI result.
     :param premise: opinion sentence
     :param hypothesis: opinion sentence
     :param transformer_path: path of the transformer nlp object.
@@ -178,7 +172,7 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
     :param model_path: path where the model is saved as h5 file.
     :param model_type: type of the model. either ESIM or Decomposable attention.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
-    :param attention_map: boolean value to show attention heatmap of string based comparison.
+    :param attention_map: boolean value to show attention heatmap of premise - hypothesis comparison.
     :param result_path: path of the file where the results will be saved.
     :param nli_type: type of the nli set which the model trained on.
     :return: None
@@ -201,9 +195,9 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
         scores = outputs[0]
         print("Entailment type is:", entailment_types[scores.argmax()],
               "\nEntailment confidence is: ", scores.max(),
-              "\nContradiction score is", float("{:.8f}".format(float(outputs[0][0][1]))),
-              "\nEntailment score is", float("{:.8f}".format(float(outputs[0][0][0]))),
-              "\nNeutral score is,", float("{:.8f}".format(float(outputs[0][0][2]))))
+              "\nContradiction score is", float("{:.4f}".format(float(outputs[0][0][1]))),
+              "\nEntailment score is", float("{:.4f}".format(float(outputs[0][0][0]))),
+              "\nNeutral score is,", float("{:.4f}".format(float(outputs[0][0][2]))))
 
         if attention_map:
             def get_attended_tokens(doc):
@@ -256,9 +250,9 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
             elif prediction is 'neutral':
                 neutral += 1
             total += 1
-        print("total contradiction = ", contradiction / total)
-        print("total entailment =", entailment / total)
-        print("total neutral =", neutral / total)
+        print("Total Contradiction = ", float("{:.2f}".format(float(contradiction / total))))
+        print("Total Entailment =", float("{:.2f}".format(float(entailment / total))))
+        print("Total Neutral =", float("{:.2f}".format(float(neutral / total))))
 
         prediction_type.append(total)
         contradiction_score.append(contradiction)
