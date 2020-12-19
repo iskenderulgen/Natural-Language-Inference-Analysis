@@ -14,7 +14,7 @@ results: "/media/ulgen/Samsung/contradiction_data/results/"
 
 model_paths:
   esim: "/media/ulgen/Samsung/contradiction_data/nli_models/esim/"
-  decomposable_attention: "media/ulgen/Samsung/contradiction_data/nli_models/decomposable_attention/"
+  decomposable_attention: "/media/ulgen/Samsung/contradiction_data/nli_models/decomposable_attention/"
 
 # Transformers Paths
 
@@ -23,15 +23,16 @@ transformer_paths:
   fasttext: "/media/ulgen/Samsung/contradiction_data/transformers/fasttext/"
   word2vec: "/media/ulgen/Samsung/contradiction_data/transformers/word2vec/"
   glove: "/media/ulgen/Samsung/contradiction_data/transformers/glove/"
+  tf_hub_path: "/media/ulgen/Samsung/contradiction_data/transformers/tf_hub"
 
 # Network Parameters
 
 nr_unk: 100
 max_length: 64
-nr_hidden: 300
+nr_hidden: 512
 dropout: 0.2
-learn_rate: 0.0004
+learn_rate: 0.0001
 batch_size: 32
-nr_epoch: 20
+nr_epoch: 3
 nr_class: 3
-early_stopping: 4
+early_stopping: 1
