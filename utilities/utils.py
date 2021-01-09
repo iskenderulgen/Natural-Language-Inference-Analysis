@@ -1,11 +1,9 @@
 import glob
-import importlib
 import json
-import os
 import pickle
 import xml.etree.ElementTree as ET
 from pathlib import Path
-import tensorflow as tf
+
 import en_core_web_lg
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,8 +11,8 @@ import pandas as pd
 import plac
 import seaborn as sns
 import spacy
+import tensorflow as tf
 import yaml
-
 from tensorflow.keras.utils import to_categorical
 
 """Pandas show non-truncated results"""
@@ -541,7 +539,7 @@ def main():
     and run.
     :return: None
     """
-    merge_snli_style_sets(nli_set_path="/home/ulgen/Downloads/anli_raw/train",nli_definition="train")
+    merge_snli_style_sets(nli_set_path="/home/ulgen/Downloads/anli_raw/train", nli_definition="train")
 
 
 if __name__ == "__main__":
