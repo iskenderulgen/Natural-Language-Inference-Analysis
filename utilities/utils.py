@@ -13,6 +13,7 @@ import seaborn as sns
 import spacy
 import tensorflow as tf
 import yaml
+from gensim.models import KeyedVectors
 from tensorflow.keras.utils import to_categorical
 
 """Pandas show non-truncated results"""
@@ -49,7 +50,7 @@ def load_configurations():
     settings are handled in configuration yaml file. This enables single centralized control over parameters and paths.
     :return: returns configurations.
     """
-    with open("/home/ulgen/Documents/Python_Projects/Contradiction/configurations.yaml", 'r') as stream:
+    with open("/home/ulgen/Documents/python_projects/Contradiction/configurations.yaml", 'r') as stream:
         try:
             configurations = (yaml.safe_load(stream))
         except yaml.YAMLError as exc:
@@ -81,28 +82,41 @@ def read_nli(path):
     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
 
-def load_spacy_nlp(transformer_path, transformer_type):
+def read_test_json(path):
+    """
+    Reads the real life test dataset from the given path
+    :param path: path of the NLI dataset
+    :return: returns the NLI data as list of texts.
+    """
+    texts1 = []
+    texts2 = []
+    with open(path, "r") as file_:
+        for line in file_:
+            nli_data = json.loads(line)
+            texts1.append(nli_data["premise"])
+            texts2.append(nli_data["hypothesis"])
+
+    print("NLI dataset loaded")
+    return texts1, texts2
+
+
+def load_spacy_nlp(configs, transformer_type):
     """
     Loads spacy based NLP object which converts raw text into ids of tokens. Currently this project supports three
     types of NLP embeddings objects. Glove - Fasttext - Word2Vec
-    :param transformer_path: path of the transformer object.
+    :param configs: path of the transformer object.
     :param transformer_type: type definition of the transformer.
     :return: returns NLP object.
     """
-    nlp = None
 
-    if transformer_type == 'glove':
-        print("Loading Glove Vectors")
-        nlp = en_core_web_lg.load()
-
-    elif transformer_type == 'fasttext':
-        print("Loading Fasttext Vectors")
-        nlp = spacy.load(transformer_path[transformer_type])
-
-    elif transformer_type == 'word2vec':
-        print("Loading Word2Vec Vectors")
-        nlp = spacy.load(transformer_path[transformer_type])
-
+    if transformer_type == 'ontonotes5':
+        print("Loading", transformer_type, "NLP object")
+        nlp = en_core_web_lg.load(disable=['parser', 'tagger', 'ner', 'textcat', 'lemmatizer',
+                                           'attribute_ruler', 'tok2vec'])
+    else:
+        print(transformer_type, "NLP object is loaded")
+        nlp = spacy.load(configs[transformer_type], disable=['parser', 'tagger', 'ner', 'textcat', 'lemmatizer',
+                                                             'attribute_ruler', 'tok2vec'])
     """shows the unique vector size/count."""
     # print(transformer_type, "unique vector size / count", len(nlp.vocab.vectors))
     return nlp
@@ -173,7 +187,8 @@ def predictions_to_html(nli_type, premises, hypothesises, prediction, contradict
               nli_type + ' model neutral score': neutral_score,
               nli_type + ' model entailment score': entailment_score}
     )
-    html = predictions_df.to_html(float_format=lambda x: ('%.3f' % x) * 100)
+    # html = predictions_df.to_html(float_format=lambda x: ('%.3f' % x) * 100)
+    html = predictions_df.to_html()
     text_file = open(result_path + nli_type + ".html", "w")
     text_file.write(html)
     text_file.close()
@@ -533,14 +548,35 @@ def label_comparison(human_label_path, model_result_path, nli_type):
     print("accuracy :", tp / total)
 
 
+def convert_bin_word2vec_to_tex(path):
+    """
+    Before converting to txt from bin file, extract the gz file. Due to possible memory problems, reading from gz is
+    not provided in this script.
+    :param path: path of the bin file of word2vec
+    :return: None
+    """
+    loc = Path(path)
+    model = KeyedVectors.load_word2vec_format(loc, binary=True)
+    loc = loc.with_suffix('.txt')
+    model.wv.save_word2vec_format(loc)
+    print("word2vec vectors are saved as txt file to:", loc)
+
+
 def main():
     """
     NLI file manipulation and other needs can be carried out using utils function set. Define the function in main
     and run.
     :return: None
     """
-    merge_snli_style_sets(nli_set_path="/home/ulgen/Downloads/anli_raw/train", nli_definition="train")
+    # merge_snli_style_sets(nli_set_path="/home/ulgen/Downloads/anli_raw/train", nli_definition="train")
 
+    # convert_bin_word2vec_to_tex(
+    #     path="/media/ulgen/Samsung/contradiction_data_depo/zips/GoogleNews-vectors-negative300.bin")
+
+
+    xml_data_to_json(path1="/media/ulgen/Samsung/contradiction_data/results/evolution-vs-creation_evolution.xml",
+                     path2="/media/ulgen/Samsung/contradiction_data/results/evolution-vs-creation_creation.xml",
+                     nli_type="entailment")
 
 if __name__ == "__main__":
     plac.call(main)
