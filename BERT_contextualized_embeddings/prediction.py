@@ -7,7 +7,7 @@ from tensorflow.keras.models import load_model
 import tensorflow_hub as hub
 from bert import tokenization
 from utilities.utils import read_nli, attention_visualization, load_configurations, \
-    predictions_to_html, set_memory_growth
+    predictions_to_html, set_memory_growth, read_test_json
 
 set_memory_growth()
 configs = load_configurations()
@@ -15,46 +15,41 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--mode", type=str, default="evaluate",
                     help="This argument is to select whether to carry out 'evaluate' or 'demo' operation. Evaluate"
                          "operation takes labeled test data and measures the accuracy of the model. Demo operation"
-                         "is for real-life usage. Demo support two individual sentence or list of sentences"
+                         "is for real-life usage. Demo compares two individual sentence or list of sentences"
                          "as input data.")
 
 parser.add_argument("--nli_type", type=str, default="snli",
-                    help="This parameter defines the train data which the model trained on. By specifying this"
-                         "one can see the model behaviour based on trained data on prediction time. There are 3 main "
+                    help="This parameter defines the train data which the model trained with. By specifying this"
+                         "one can see the model behaviour on prediction time based on train data. There are 3 main "
                          "nli dataset 'snli', 'mnli', 'anli'. One can combine each of these according to their needs."
-                         "Specify this by hand, based on the model you will use on prediction time. If you"
-                         "combine train sets, dont use underline to define combination. Send parameter with one blank"
-                         "space. It will shorten the html cell size. For example 'snli mnli' for combination of snli "
-                         "and mnli train sets")
+                         "If you combine train sets, dont use underline to define combination. Send parameter with one"
+                         "blank space. It will shorten the html cell size. For example 'snli mnli' for combination of "
+                         "snli and mnli train sets. This will be used for result columns and graphs.")
 
-parser.add_argument("--transformer_type", type=str, default="bert contextualized",
-                    help="Type of the transformer in this case this argument takes 'bert contextualized' as default"
-                         "This will be used to label resulting graphs and other files.")
+parser.add_argument("--bert_tf_hub", type=str, default="bert_tf_hub_contextualized",
+                    help="When used with imported config parameter from yaml file it gives the path of the "
+                         "BERT tensorflow-hub model. It is also the type of the transformer,"
+                         "This will also be used to label resulting graphs and other files.")
 
 parser.add_argument("--model_type", type=str, default="esim",
-                    help="Type of the model architecture that model is trained on. Contextualized word embeddings"
-                         "are only used with ESIM model. This parameter takes only ESIM model architecture")
+                    help="Type of the model architecture that the model is trained on. Contextualized word embeddings"
+                         "are only used with ESIM model. This parameter takes only ESIM model architecture. This "
+                         "parameter also carries the model save path information hence this is used for both defining"
+                         "architecture and carrying path information.")
 
 parser.add_argument("--visualization", type=bool, default=True,
                     help="shows attention heatmaps between two opinion sentences, best used with single"
                          "premise- hypothesis opinion sentence.")
 
-parser.add_argument("--bert_tf_hub_path", type=str, default=configs["transformer_paths"]["tf_hub_path"],
-                    help="imports bert tensorflow-hub model")
-
 parser.add_argument("--max_length", type=str, default=configs["max_length"],
-                    help="Max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
-                         "padded. longer sentences means longer sequences to train. Select best length based"
-                         "on your rig.")
-
-parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
-                    help="The path where trained NLI model will be saved.")
-
-parser.add_argument("--result_path", type=str, default=configs["results"],
-                    help="path of the folder where results and graphs will be saved.")
+                    help="Max length of the sentences, longer sentences will be pruned and shorter ones will be zero"
+                         "padded. longer sentences mean longer sequences to train. Pick best length based on your rig.")
 
 parser.add_argument("--test_loc", type=str, default=configs["nli_set_test"],
                     help="Test data location which will be used to measure the accuracy of the model")
+
+parser.add_argument("--result_path", type=str, default=configs["results"],
+                    help="path of the folder where results and graphs will be saved.")
 args = parser.parse_args()
 
 entailment_types = ["entailment", "contradiction", "neutral"]
@@ -62,15 +57,16 @@ entailment_types = ["entailment", "contradiction", "neutral"]
 
 def bert_encode(text, max_length, tokenizer, attention_heatmap):
     """
-    Bert requires special pre processing before feeding information to BERT model. Each text must be converted in to
-    token_id, pad_mask and segment ids. Bert takes three inputs as described and converts text in to contextualized
+    Bert requires special pre-processing before feeding information to BERT model. Each text must be converted in to
+    token_id, pad_mask and segment_ids. Bert takes three inputs as described and converts text in to contextualized
     word embeddings.
-    :param text: opinion sentence
+    :param text: opinion sentence.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
-    :param tokenizer: Bert tokenizer object
+    :param tokenizer: bert tokenizer object.
     :param attention_heatmap: boolean value to show attention heatmap of premise - hypothesis comparison.
-    :return: token_ids, masks, segments_ids.
+    :return: token_ids, masks_ids, segments_ids.
     """
+
     text = tokenizer.tokenize(text)
 
     text = text[:max_length - 2]
@@ -83,27 +79,37 @@ def bert_encode(text, max_length, tokenizer, attention_heatmap):
     segment_ids = [0] * max_length
 
     if attention_heatmap:
-        return tf.convert_to_tensor(tokens), tf.convert_to_tensor(pad_masks),\
+        return tf.convert_to_tensor(tokens), tf.convert_to_tensor(pad_masks), \
                tf.convert_to_tensor(segment_ids), input_sequence
     else:
         return tf.convert_to_tensor(tokens), tf.convert_to_tensor(pad_masks), tf.convert_to_tensor(segment_ids)
 
 
-def evaluate(dev_loc, max_length, tf_hub_path, model_path, model_type):
+def evaluate(test_loc, max_length, bert_tf_hub, model_type):
+    """
+    Evaluates the trained NLI model with labeled NLI test data and prints accuracy metric.
+    :param test_loc: labeled evaluation test data location.
+    :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
+    :param bert_tf_hub: the path definition of the BERT tensorflow-hub model.
+    :param model_type: trained model architecture type. carries both model path and type definition information.
+    :return: None
+    """
+
     print("Loading trained NLI model")
-    model = load_model(model_path[model_type] + "model.h5", custom_objects={"tf": tf, "KerasLayer": hub.KerasLayer})
+    model = load_model(configs[model_type] + "model", custom_objects={"tf": tf, "KerasLayer": hub.KerasLayer})
     print("Trained NLI model loaded")
 
-    bert_encoder = hub.KerasLayer(handle=tf_hub_path, trainable=False)
+    bert_encoder = hub.KerasLayer(handle=configs[bert_tf_hub], trainable=False)
     vocab_file = bert_encoder.resolved_object.vocab_file.asset_path.numpy()
     do_lower_case = bert_encoder.resolved_object.do_lower_case.numpy()
-    tokenizer = tokenization.FullTokenizer(vocab_file, do_lower_case)
+    tokenizer = tokenization.FullTokenizer(vocab_file=vocab_file, do_lower_case=do_lower_case)
 
     model.summary()
-    model = Model(inputs=model.input,
-                  outputs=[model.output, model.get_layer('sum_x1').output, model.get_layer('sum_x2').output])
+    # burada model outpu degistirildi attentin degerlerine ihtiyac yok bunu test et
+    model = Model(inputs=model.input, outputs=model.output)
+    model.summary()
 
-    premise, hypothesis, dev_labels = read_nli(dev_loc)
+    premise, hypothesis, dev_labels = read_nli(path=test_loc)
 
     total = 0.0
     true_p = 0.0
@@ -121,32 +127,29 @@ def evaluate(dev_loc, max_length, tf_hub_path, model_path, model_type):
         if entailment_types[outputs[0].argmax()] == entailment_types[label.argmax()]:
             true_p += 1
         total += 1
-    print("NLI Model Accuracy is", true_p / total)
+    print("NLI Model Accuracy is:", true_p / total)
 
 
-def demo(premise, hypothesis, transformer_type, model_path, model_type,
-         max_length, attention_map, result_path, nli_type, tf_hub_path):
+def demo(premise, hypothesis, nli_type, bert_tf_hub, model_type, max_length, attention_map, result_path):
     """
     Performs demo operation using trained NLI model. Either takes two strings or list of strings. Compares the
     premise - hypothesis pairs and returns the NLI result.
-    :param tf_hub_path: Bert contextualized transformer Tensorflow Hub Path.
-    :param premise: opinion sentence
-    :param hypothesis: opinion sentence
-    :param transformer_type: type of the transformer in this case it is 'bert'.
-    :param model_path: path where the trained NLI model is saved as h5 file.
+    :param premise: opinion sentence.
+    :param hypothesis: opinion sentence.
+    :param nli_type: type of the nli set which is the model trained with.
+    :param bert_tf_hub: BERT contextualized transformer Tensorflow Hub module path and definition information.
     :param model_type: type of the model. In this case arguments takes only ESIM.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
-    :param attention_map: boolean value to show attention heatmap of premise - hypothesis  comparison.
+    :param attention_map: boolean value to show attention heatmap of premise - hypothesis  pair.
     :param result_path: path of the file where the results will be saved.
-    :param nli_type: type of the nli set which is the model trained on.
-    :return: None
+    :return: None.
     """
 
     print("Loading NLI model")
-    model = load_model(model_path[model_type] + "model.h5", custom_objects={"tf": tf, "KerasLayer": hub.KerasLayer})
+    model = load_model(configs[model_type] + "model", custom_objects={"tf": tf, "KerasLayer": hub.KerasLayer})
     print("NLI model loaded")
 
-    bert_encoder = hub.KerasLayer(handle=tf_hub_path, trainable=False)
+    bert_encoder = hub.KerasLayer(handle=configs[bert_tf_hub], trainable=False)
     vocab_file = bert_encoder.resolved_object.vocab_file.asset_path.numpy()
     do_lower_case = bert_encoder.resolved_object.do_lower_case.numpy()
     tokenizer = tokenization.FullTokenizer(vocab_file, do_lower_case)
@@ -181,9 +184,10 @@ def demo(premise, hypothesis, transformer_type, model_path, model_type,
         if attention_map:
             attention_visualization(tokens1=words1, tokens2=words2,
                                     attention1=outputs[1], attention2=outputs[2],
-                                    results_path=result_path, transformer_type=transformer_type)
+                                    results_path=result_path, transformer_type=bert_tf_hub)
 
     elif type(premise) and type(hypothesis) is list:
+        # takes the shortest list length as base in case lists are not contain the same amount of examples.
         a = min(len(premise), len(hypothesis))
         premises = premise[:a]
         hypothesises = hypothesis[:a]
@@ -203,16 +207,16 @@ def demo(premise, hypothesis, transformer_type, model_path, model_type,
                                                      tokenizer=tokenizer, attention_heatmap=False)
 
             tokens2, masks2, segments2 = bert_encode(text=text2, max_length=max_length,
-                                                     attention_heatmap=False, tokenizer=tokenizer)
+                                                     tokenizer=tokenizer, attention_heatmap=False)
 
             outputs = model.predict([[tokens1], [masks1], [segments1],
                                      [tokens2], [masks2], [segments2]])
             prediction = entailment_types[outputs[0].argmax()]
 
             prediction_type.append(prediction)
-            contradiction_score.append(float("{:.2f}".format(float(outputs[0][0][1]))))
-            neutral_score.append(float("{:.2f}".format(float(outputs[0][0][2]))))
-            entailment_score.append(float("{:.2f}".format(float(outputs[0][0][0]))))
+            contradiction_score.append(float("{:.3f}".format(float(outputs[0][0][1]))) * 100)
+            neutral_score.append(float("{:.3f}".format(float(outputs[0][0][2]))) * 100)
+            entailment_score.append(float("{:.3f}".format(float(outputs[0][0][0]))) * 100)
 
             if prediction is 'contradiction':
                 contradiction += 1
@@ -222,10 +226,11 @@ def demo(premise, hypothesis, transformer_type, model_path, model_type,
                 neutral += 1
             total += 1
 
-        print("Total Contradiction = ", float("{:.2f}".format(float(contradiction / total))))
-        print("Total Entailment =", float("{:.2f}".format(float(entailment / total))))
-        print("Total Neutral =", float("{:.2f}".format(float(neutral / total))))
+        print("Total Contradiction = ", float("{:.3f}".format(float(contradiction / total))) * 100)
+        print("Total Entailment =", float("{:.3f}".format(float(entailment / total))) * 100)
+        print("Total Neutral =", float("{:.3f}".format(float(neutral / total))) * 100)
 
+        # last line of the result output html show the total amount of data and predictions.
         prediction_type.append(total)
         contradiction_score.append(contradiction)
         neutral_score.append(neutral)
@@ -245,31 +250,28 @@ def demo(premise, hypothesis, transformer_type, model_path, model_type,
 def main():
     if args.mode == "evaluate":
         print("test mode is", args.mode)
-        evaluate(dev_loc=args.test_loc,
+        evaluate(test_loc=args.test_loc,
                  max_length=args.max_length,
-                 tf_hub_path=args.bert_tf_hub_path,
-                 model_path=args.model_save_path,
+                 bert_tf_hub=args.bert_tf_hub,
                  model_type=args.model_type)
 
     elif args.mode == "demo":
         print("test mode is", args.mode)
 
-        path = "/media/ulgen/Samsung/contradiction_data_depo/results/a/data/UKPConvArg1Strict-XML/"
+        premise, hypothesis = read_test_json(
+            path="/media/ulgen/Samsung/contradiction_data/results/evaluation_entailment.jsonl")
 
+        # premise = "in the park alice plays a flute solo"
+        # hypothesis = "someone playing music outside"
 
-        premise = "in the park alice plays a flute solo"
-        hypothesis = "someone playing music outside"
-
-        demo(max_length=args.max_length,
-             tf_hub_path=args.bert_tf_hub_path,
-             transformer_type=args.transformer_type,
-             model_path=args.model_save_path,
-             model_type=args.model_type,
-             premise=premise,
+        demo(premise=premise,
              hypothesis=hypothesis,
+             nli_type=args.nli_type,
+             bert_tf_hub=args.bert_tf_hub,
+             model_type=args.model_type,
+             max_length=args.max_length,
              attention_map=args.visualization,
-             result_path=args.result_path,
-             nli_type=args.nli_type)
+             result_path=args.result_path)
 
 
 if __name__ == "__main__":
