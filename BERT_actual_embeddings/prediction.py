@@ -12,7 +12,7 @@ from tensorflow.keras import Model
 from tensorflow.keras.models import load_model
 
 from bert import tokenization
-from utilities.utils import read_nli, attention_visualization, xml_test_file_reader, load_configurations, \
+from utilities.utils import read_nli, attention_visualization, load_configurations, \
     predictions_to_html, set_memory_growth
 
 set_memory_growth()
@@ -21,66 +21,60 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--mode", type=str, default="evaluate",
                     help="This argument is to select whether to carry out 'evaluate' or 'demo' operation. Evaluate"
                          "operation takes labeled test data and measures the accuracy of the model. Demo operation"
-                         "is for real-life usage. Demo support two individual sentence or list of sentences"
+                         "is for real-life usage. Demo compares two individual sentence or list of sentences"
                          "as input data.")
 
 parser.add_argument("--nli_type", type=str, default="snli",
-                    help="This parameter defines the train data which the model trained on. By specifying this"
-                         "one can see the model behaviour based on trained data on prediction time. There are 3 main "
+                    help="This parameter defines the train data which the model trained with. By specifying this"
+                         "one can see the model behaviour on prediction time based on train data. There are 3 main "
                          "nli dataset 'snli', 'mnli', 'anli'. One can combine each of these according to their needs."
-                         "Specify this by hand, based on the model you will use on prediction time. If you"
-                         "combine train sets, dont use underline to define combination. Send parameter with one blank"
-                         "space. It will shorten the html cell size. For example 'snli mnli' for combination of snli "
-                         "and mnli train sets")
+                         "If you combine train sets, dont use underline to define combination. Send parameter with one"
+                         "blank space. It will shorten the html cell size. For example 'snli mnli' for combination of "
+                         "snli and mnli train sets. This will be used for result columns and graphs.")
 
-parser.add_argument("--transformer_type", type=str, default="bert",
-                    help="Type of the transformer which will convert texts in to word-ids. This script is designed for"
-                         "only bert. Parameter rakes only 'bert' option.")
+parser.add_argument("--transformer_type", type=str, default="bert_embeddings",
+                    help="Type of the transformer which will convert texts in to word-ids. Also carries the path "
+                         "information of transformer object. This script is designed for only bert actual embeddings."
+                         "Parameter takes only 'bert_embeddings' option.")
 
 parser.add_argument("--model_type", type=str, default="esim",
-                    help="Type of the model that will be trained. "
-                         "for ESIM model type 'esim' "
-                         "for Decomposable Attention model type 'decomposable_attention'. ")
+                    help="Type of the model architecture that the model is trained on. This parameter also carries the "
+                         "model save path information hence this is used for both defining architecture and carrying "
+                         "path information."
+                         "for ESIM model use 'esim' "
+                         "for Decomposable Attention model use 'decomposable_attention'.")
 
 parser.add_argument("--visualization", type=bool, default=True,
                     help="shows attention heatmaps between two opinion sentences, best used with single"
                          "premise- hypothesis opinion sentence.")
 
-parser.add_argument("--transformer_path", type=str, default=configs["transformer_paths"],
-                    help="Main transformer model path which will convert the text in to word-ids and vectors."
-                         "transformer path has four sub paths, load_nlp module will carry out the sub model paths"
-                         "based on transformer_type selection")
-
 parser.add_argument("--max_length", type=str, default=configs["max_length"],
-                    help="Max length of the sentences,longer sentences will be pruned and shorter ones will be zero"
-                         "padded. longer sentences means longer sequences to train. Select best length based"
-                         "on your rig.")
-
-parser.add_argument("--model_save_path", type=str, default=configs["model_paths"],
-                    help="The path where trained NLI model is saved.")
-
-parser.add_argument("--result_path", type=str, default=configs["results"],
-                    help="path of the folder where results and graphs will be saved.")
+                    help="Max length of the sentences, longer sentences will be pruned and shorter ones will be zero"
+                         "padded. longer sentences mean longer sequences to train. Pick best length based on your rig.")
 
 parser.add_argument("--test_loc", type=str, default=configs["nli_set_test"],
                     help="Test data location which will be used to measure the accuracy of the model")
+
+parser.add_argument("--result_path", type=str, default=configs["results"],
+                    help="path of the folder where results and graphs will be saved.")
 args = parser.parse_args()
 
 entailment_types = ["entailment", "contradiction", "neutral"]
 
 
-def convert_examples_to_features(sentence, max_length, attention_heatmap, tokenizer):
+def convert_examples_to_features(text, max_length, tokenizer, attention_heatmap):
     """
-    Converts to unicode and tokenizes the examples. converts sentences in to features such as id's of the tokens,
-    not full vector representations.
-    :param sentence: opinion sentence.
+    Converts the given pairs to unicode and tokenizes the examples to map into features such as ids of tokens. IDs of
+    tokens are mapped using the lookup table extracted from BERT vector - vocabulary pairs. This does not  provide
+    full vector representations.
+    :param text: opinion sentence.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
-    :param attention_heatmap: shows the attention heatmap of two opinion sentences.
     :param tokenizer: bert tokenizer object. loads the vocabulary from bert folder and performs full tokenizer.
+    :param attention_heatmap: boolean value to show attention heatmap of premise - hypothesis comparison.
     :return: word ids and tokens based on the visualization option.
     """
 
-    tokens = tokenizer.tokenize(sentence)
+    tokens = tokenizer.tokenize(text)
 
     if len(tokens) > max_length:
         tokens = tokens[0:max_length]
@@ -99,87 +93,82 @@ def convert_examples_to_features(sentence, max_length, attention_heatmap, tokeni
         return word_ids
 
 
-def evaluate(dev_loc, max_length, transformer_path, transformer_type, model_path, model_type):
+def evaluate(test_loc, max_length, transformer_type, model_type):
     """
-    This function is to measure the model accuracy, it takes labeled test NLI data and performs model test on it.
-    :param dev_loc: labeled test data location.
+    Evaluates the trained NLI model with labeled NLI test data and prints accuracy metric.
+    :param test_loc: labeled evaluation test data location.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
-    :param transformer_path: path of the transformer objects.
-    :param transformer_type: type of the transformer in this case it is 'bert'.
-    :param model_path: path where the model is saved as h5 file.
-    :param model_type: type of the model. either 'ESIM' or 'Decomposable Attention'.
+    :param transformer_type: type of the transformer in this case it is 'bert_embeddings'.
+    :param model_type: trained model architecture type. It is determined with argparse in the argument section.
     :return: None
     """
     print("Loading trained NLI model")
-    model = load_model(model_path[model_type] + "model.h5", custom_objects={"tf": tf})
+    model = load_model(configs[model_type] + "model")
     print("trained NLI model loaded")
 
     model.summary()
-    model = Model(inputs=model.input,
-                  outputs=[model.output, model.get_layer('sum_x1').output, model.get_layer('sum_x2').output])
+    model = Model(inputs=model.input, outputs=model.output)
 
     tokenizer = tokenization.FullTokenizer(
-        vocab_file=transformer_path[transformer_type] + "vocab.txt", do_lower_case=True)
+        vocab_file=configs[transformer_type] + "vocab.txt", do_lower_case=True)
 
-    premise, hypothesis, dev_labels = read_nli(dev_loc)
+    premise, hypothesis, dev_labels = read_nli(test_loc)
 
     total = 0.0
     true_p = 0.0
 
     for text1, text2, label in zip(premise, hypothesis, dev_labels):
-        premise_features = convert_examples_to_features(sentence=text1, max_length=max_length,
-                                                        attention_heatmap=False, tokenizer=tokenizer)
+        premise_features = convert_examples_to_features(text=text1, max_length=max_length,
+                                                        tokenizer=tokenizer, attention_heatmap=False)
 
-        hypothesis_features = convert_examples_to_features(sentence=text2, max_length=max_length,
-                                                           attention_heatmap=False, tokenizer=tokenizer)
+        hypothesis_features = convert_examples_to_features(text=text2, max_length=max_length,
+                                                           tokenizer=tokenizer, attention_heatmap=False)
 
         outputs = model.predict([premise_features, hypothesis_features])
         # scores = outputs[0]
         if entailment_types[outputs[0].argmax()] == entailment_types[label.argmax()]:
             true_p += 1
         total += 1
-        print("Entailment Model Accuracy is:", true_p / total)
+    print("NLI Model Accuracy is:", true_p / total)
 
 
-def demo(premise, hypothesis, transformer_path, transformer_type, model_path, model_type,
-         max_length, attention_map, result_path, nli_type):
+def demo(premise, hypothesis, transformer_type, nli_type, model_type, max_length, attention_map, result_path):
     """
-    Performs demo operation using trained NLI model. Either takes two strings or list of strings and compares the
+    Performs demo operation using trained NLI model. Either takes two strings or list of strings. Compares the
     premise - hypothesis pairs and returns the NLI result.
-    :param premise: opinion sentence
-    :param hypothesis: opinion sentence
-    :param transformer_path: path of the transformer object.
-    :param transformer_type: type of the transformer in this case it is 'bert'.
-    :param model_path: path where the model is saved as h5 file.
+    :param premise: opinion sentence.
+    :param hypothesis: opinion sentence.
+    :param transformer_type: type of the transformer in this case it is 'bert_embeddings'.
+    :param nli_type: type of the nli set which the model trained on.
     :param model_type: type of the model. either ESIM or Decomposable attention.
     :param max_length: max length of the sentence. longer ones will be pruned, shorter ones will be padded.
     :param attention_map: boolean value to show attention heatmap of premise - hypothesis comparison.
     :param result_path: path of the file where the results will be saved.
-    :param nli_type: type of the nli set which the model trained on.
     :return: None
     """
     print("Loading NLI model")
-    model = load_model(model_path[model_type] + "model.h5", custom_objects={"tf": tf})
+    model = load_model(configs[model_type] + "model")
     print("NLI model loaded")
 
-    model.summary()
-    model = Model(inputs=model.input,
-                  outputs=[model.output, model.get_layer('sum_x1').output, model.get_layer('sum_x2').output])
-
     tokenizer = tokenization.FullTokenizer(
-        vocab_file=transformer_path[transformer_type] + "vocab.txt", do_lower_case=True)
+        vocab_file=configs[transformer_type] + "vocab.txt", do_lower_case=True)
 
     if type(premise) and type(hypothesis) is str:
+
+        model.summary()
+        model = Model(inputs=model.input,
+                      outputs=[model.output, model.get_layer('sum_x1').output, model.get_layer('sum_x2').output])
 
         print("premise:", premise)
         print("hypothesis:", hypothesis)
 
-        premise_features, premise_token = convert_examples_to_features(sentence=premise, max_length=max_length,
-                                                                       attention_heatmap=True, tokenizer=tokenizer)
+        premise_features, premise_token = convert_examples_to_features(text=premise, max_length=max_length,
+                                                                       tokenizer=tokenizer,
+                                                                       attention_heatmap=True)
 
-        hypothesis_features, hypothesis_token = convert_examples_to_features(sentence=hypothesis, max_length=max_length,
-                                                                             attention_heatmap=True,
-                                                                             tokenizer=tokenizer)
+        hypothesis_features, hypothesis_token = convert_examples_to_features(text=hypothesis, max_length=max_length,
+                                                                             tokenizer=tokenizer,
+                                                                             attention_heatmap=True)
 
         outputs = model.predict([premise_features, hypothesis_features])
         scores = outputs[0]
@@ -195,6 +184,10 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
                                     results_path=result_path, transformer_type=transformer_type)
 
     elif type(premise) and type(hypothesis) is list:
+
+        model.summary()
+        model = Model(inputs=model.input, outputs=model.output)
+
         a = min(len(premise), len(hypothesis))
         premises = premise[:a]
         hypothesises = hypothesis[:a]
@@ -210,11 +203,11 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
         neutral = 0.0
 
         for text1, text2 in zip(premises, hypothesises):
-            premise_features = convert_examples_to_features(sentence=text1, max_length=max_length,
-                                                            attention_heatmap=False, tokenizer=tokenizer)
+            premise_features = convert_examples_to_features(text=text1, max_length=max_length,
+                                                            tokenizer=tokenizer, attention_heatmap=False)
 
-            hypothesis_features = convert_examples_to_features(sentence=text2, max_length=max_length,
-                                                               attention_heatmap=False, tokenizer=tokenizer)
+            hypothesis_features = convert_examples_to_features(text=text2, max_length=max_length,
+                                                               tokenizer=tokenizer, attention_heatmap=False)
 
             outputs = model.predict([premise_features, hypothesis_features])
             prediction = entailment_types[outputs[0].argmax()]
@@ -254,11 +247,9 @@ def demo(premise, hypothesis, transformer_path, transformer_type, model_path, mo
 
 def main():
     if args.mode == "evaluate":
-        evaluate(dev_loc=args.test_loc,
+        evaluate(test_loc=args.test_loc,
                  max_length=args.max_length,
-                 transformer_path=args.transformer_path,
                  transformer_type=args.transformer_type,
-                 model_path=args.model_save_path,
                  model_type=args.model_type)
 
     elif args.mode == "demo":
@@ -271,16 +262,15 @@ def main():
         premise = "in the park alice plays a flute solo"
         hypothesis = "someone playing music outside"
 
-        demo(max_length=args.max_length,
-             transformer_path=args.transformer_path,
-             transformer_type=args.transformer_type,
-             model_path=args.model_save_path,
-             model_type=args.model_type,
-             premise=premise,
+        demo(premise=premise,
              hypothesis=hypothesis,
+             transformer_type=args.transformer_type,
+             nli_type=args.nli_type,
+             model_type=args.model_type,
+             max_length=args.max_length,
              attention_map=args.visualization,
-             result_path=args.result_path,
-             nli_type=args.nli_type)
+             result_path=args.result_path
+             )
 
 
 if __name__ == "__main__":

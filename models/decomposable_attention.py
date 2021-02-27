@@ -6,7 +6,7 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
     input1 = layers.Input(shape=(max_length,), dtype="int32", name="words1")
     input2 = layers.Input(shape=(max_length,), dtype="int32", name="words2")
 
-    embed = word_embedding_layer(vectors, max_length)
+    embed = word_embedding_layer(vectors=vectors, max_length=max_length, nr_hidden=nr_hidden)
 
     x1 = embed(input1)
     x2 = embed(input2)
@@ -15,8 +15,8 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
     F = create_feedforward(num_units=nr_hidden)
     att_weights = layers.dot([F(x1), F(x2)], axes=-1)
 
+    #entailment direction is both sides.
     G = create_feedforward(num_units=nr_hidden)
-
     norm_weights_a = layers.Lambda(normalizer(1), name='normalize_axis_1_of_att_weights')(att_weights)
     norm_weights_b = layers.Lambda(normalizer(2), name='normalize_axis_2_of_att_weights')(att_weights)
     alpha = layers.dot([norm_weights_a, x1], axes=1, name='dot_product_norm_weight_a_with_x1')
@@ -50,7 +50,7 @@ def decomposable_attention_model(vectors, max_length, nr_hidden, nr_class, learn
     return model
 
 
-def word_embedding_layer(vectors, max_length):
+def word_embedding_layer(vectors, max_length, nr_hidden):
     return models.Sequential(
         [
             layers.Embedding(
@@ -59,7 +59,10 @@ def word_embedding_layer(vectors, max_length):
                 input_length=max_length,
                 weights=[vectors],
                 trainable=False,
-            )
+            ),
+            layers.TimeDistributed(
+                layers.Dense(nr_hidden, activation=None, use_bias=False)
+            ),
         ]
     )
 

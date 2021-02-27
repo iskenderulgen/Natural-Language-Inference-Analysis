@@ -22,54 +22,52 @@ pd.set_option('display.width', 2000)
 
 configs = load_configurations()
 parser = argparse.ArgumentParser()
-parser.add_argument("--weights_path", type=str,
-                    default="/media/ulgen/Samsung/contradiction_data_depo/Processed_SNLI/bert_sentence/dev_x.pkl",
-                    help="SNLI premise and hypothesis sentences which are converted in to weight by using BERT"
-                         "transformer. These are the sentence representations of the opinion sentences.")
+parser.add_argument("--weights_path", type=str,  default=configs['processed_nli'],
+                    help="NLI premise and hypothesis sentences which are converted in to weight by using BERT"
+                         "transformer. These are the vector representations of the opinion sentences.")
 
-parser.add_argument("--labels_path", type=str,
-                    default="/media/ulgen/Samsung/contradiction_data_depo/NLI_sets/SNLI/dev.jsonl",
+parser.add_argument("--nli_set", type=str,  default=configs['nli_set_dev'],
                     help="This file is the original NLI train or dev/test file. We use this file to extract the labels"
-                         "to determine which label the transformed weight belongs to.")
-
-parser.add_argument("--result_path", type=str, default=configs["results"],
-                    help="path where trained graphs will be saved.")
+                         "and to calculate to example lengths.")
 
 parser.add_argument("--weights_definition", type=str, default="snli train",
                     help="This parameters defines the weight file NLI type and purpose. Such as snli - mnli or other"
-                         "types of NLI sets and train/dev/test purpose of the NLI set. This will be used to swow NLI"
+                         "types of NLI sets and train/dev/test purpose of the NLI set. This will be used to show NLI"
                          "information as plot title.")
+
+parser.add_argument("--result_path", type=str, default=configs["results"],
+                    help="path where trained graphs will be saved.")
 args = parser.parse_args()
 
 
-def nli_sets_length_distribution(nli_path, nli_definition, result_path):
+def nli_sets_example_length_analysis(nli_path, nli_definition, result_path):
     text1, text2, _ = read_nli(path=nli_path)
 
-    text1_token_len = []
-    text2_token_len = []
+    premise_token_len = []
+    hypothesis_token_len = []
 
-    for hypot, prem in zip(text1, text2):
-        text1_token_len.append(len(hypot.split(" ")))
-        text2_token_len.append(len(prem.split(" ")))
+    for premise, hypothesis in zip(text1, text2):
+        premise_token_len.append(len(premise.split(" ")))
+        hypothesis_token_len.append(len(hypothesis.split(" ")))
 
-    print(len(text1_token_len))
-    print(len(text2_token_len))
-    print("hypot_mean=", statistics.mean(text1_token_len))
-    print("prem_mean=", statistics.mean(text2_token_len))
-    print("max val 1", max(text1_token_len))
-    print("max val 2", max(text2_token_len))
+    print("total premise examples:", len(premise_token_len))
+    print("total hypothesis example:", len(hypothesis_token_len))
+    print("premise mean sentence length:", statistics.mean(premise_token_len))
+    print("hypothesis mean sentence length:", statistics.mean(hypothesis_token_len))
+    print("longest premise sentence:", max(premise_token_len))
+    print("longest hypothesis sentence:", max(hypothesis_token_len))
 
     plt.subplots(figsize=(10, 10))
     fig1, ax1 = plt.subplots()
-    ax1.set_title(nli_definition + ' sequence length distribution')
-    plt.boxplot(x=[text1_token_len, text2_token_len], labels=['premise', 'hypothesis'],
+    ax1.set_title(nli_definition + ' example length distribution')
+    plt.boxplot(x=[premise_token_len, hypothesis_token_len], labels=['premise', 'hypothesis'],
                 manage_ticks=True, autorange=True, meanline=True)
     plt.savefig(result_path + 'similarity.png', bbox_inches='tight')
     plt.draw()
     plt.show()
 
 
-def exploratory_data_analysis(weights_path, labels_path, result_path, weights_definition):
+def exploratory_data_analysis(weights_path, nli_path, result_path, weights_definition):
     """
     This function is suitable to demonstrate exploratory data analysis on sentence weights of NLI tuples. It assumes
     that NLI premises and hypothesis are vectorized using sentence based train method and saved to disk if not use
@@ -77,19 +75,19 @@ def exploratory_data_analysis(weights_path, labels_path, result_path, weights_de
     in to three groups based on their corresponding labels. Then conducts a cosine similarity between premise and
     hypothesis and plots the results.
     :param weights_path: sentence weights of NLI sentences.
-    :param labels_path: label file of the weights. Labels are extracted from the original NLI.jsonl file.
+    :param nli_path: label file of the weights. Labels are extracted from the original NLI.jsonl file.
     :param result_path: path where trained graphs will be saved.
     :param weights_definition: type of the NLI set. SNLI or MNLI or others. This will be used for plot title.
     :return: None
     """
     os.path.isfile(weights_path)
-    print("Pre-Processed weight file is found, now loading")
+    print("Pre-processed weight file is found, now loading")
     with open(weights_path, "rb") as file:
         weights = pickle.load(file)
 
-    os.path.isfile(labels_path)
-    print("labels file is found, now loading")
-    labels = open(labels_path, "r")
+    os.path.isfile(nli_path)
+    print("NLI file is found, now loading")
+    nli_set = open(nli_path, "r")
 
     premise_weights = weights[0]
     hypothesis_weights = weights[1]
@@ -98,7 +96,7 @@ def exploratory_data_analysis(weights_path, labels_path, result_path, weights_de
     contradiction_sim = []
     neutral_sim = []
 
-    for weights1, weights2, label in zip(premise_weights, hypothesis_weights, labels):
+    for weights1, weights2, label in zip(premise_weights, hypothesis_weights, nli_set):
         nli_data = json.loads(label)
         label = nli_data["gold_label"]
         if label == "-":  # ignore '-'  SNLI entries
@@ -209,8 +207,14 @@ def main():
     #                           result_path=args.result_path,
     #                           weights_definition=args.weights_definition)
 
-    nli_sets_length_distribution(nli_path="/media/ulgen/Samsung/contradiction_data_depo/NLI_sets/ANLI/train.jsonl",
-                                 nli_definition="train", result_path=args.result_path)
+    nli_sets_example_length_analysis(nli_path=args.nli_set,
+                                     nli_definition="train",
+                                     result_path=args.result_path)
+
+    exploratory_data_analysis(weights_path=args.weights_path + "/dev_x.pkl",
+                              nli_path=args.nli_set,
+                              result_path=args.result_path,
+                              weights_definition=args.weights_definition)
 
 
 if __name__ == "__main__":

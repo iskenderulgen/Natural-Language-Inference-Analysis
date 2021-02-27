@@ -33,6 +33,7 @@ def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate):
 
     m1 = layers.Concatenate(name="concatenate_x1_with_attended_x1")(
         [x1, _x1, layers.Subtract()([x1, _x1]), layers.Multiply()([x1, _x1])])
+
     m2 = layers.Concatenate(name="concatenate_x2_with_attended_x2")(
         [x2, _x2, layers.Subtract()([x2, _x2]), layers.Multiply()([x2, _x2])])
 
@@ -45,10 +46,8 @@ def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate):
     av2 = layers.Lambda(K.mean, arguments={'axis': 1}, name="k.mean_of_y2")(y2)
 
     y = layers.Concatenate(name="concatenate_max_and_mean_of_y1_and_y2")([av1, mx1, av2, mx2])
-    y = layers.Dense(1024, activation='relu')(y)
-    y = layers.Dropout(0.2)(y)
-    y = layers.Dense(512, activation='relu')(y)
-    y = layers.Dropout(0.2)(y)
+    y = layers.Dense(1024, activation='tanh')(y)
+    y = layers.Dropout(0.5)(y)
     y = layers.Dense(nr_class, activation='softmax', name='last_classifier_layer')(y)
 
     model = Model(inputs=[input1, input2], outputs=[y])
@@ -56,7 +55,7 @@ def esim_bilstm_model(vectors, max_length, nr_hidden, nr_class, learning_rate):
     model.compile(
         optimizer=optimizers.Adam(lr=learning_rate),
         loss="categorical_crossentropy",
-        metrics=["accuracy"],
+        metrics=["accuracy"]
     )
 
     return model

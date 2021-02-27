@@ -1,7 +1,9 @@
+import argparse
 import json
 
 import nltk
 import numpy as np
+import plac
 import tensorflow as tf
 import tensorflow_hub as hub
 from bert import tokenization
@@ -12,6 +14,19 @@ from utilities.utils import load_configurations, set_memory_growth
 
 set_memory_growth()
 configs = load_configurations()
+parser = argparse.ArgumentParser()
+parser.add_argument("--nli_set", type=str, default=configs['nli_set_dev'],
+                    help="This file is the original NLI train or dev/test file. We use this file to extract the labels"
+                         "and to calculate to example lengths.")
+
+parser.add_argument("--bert_tf_hub", type=str, default="bert_tf_hub_contextualized",
+                    help="When used with imported config parameter from yaml file it gives the path of the "
+                         "BERT tensorflow-hub model. It is also the type of the transformer,"
+                         "This will also be used to label resulting graphs and other files.")
+
+parser.add_argument("--result_path", type=str, default=configs["results"],
+                    help="path of the folder where results and graphs will be saved.")
+args = parser.parse_args()
 
 
 def read_nli(path):
@@ -34,9 +49,9 @@ def read_nli(path):
             labels.append(label)
 
     print("NLI dataset loaded")
-    print(len(texts1))
-    print(len(texts2))
-    print(len(labels))
+    print("total premise examples:", len(texts1))
+    print("total hypothesis example:", len(texts2))
+    print("total labels:", len(labels))
     return texts1, texts2, labels
 
 
@@ -64,7 +79,7 @@ def bert_encode(text, max_length, tokenizer):
     return output
 
 
-def compare(premise, hypothesis, label, bert, tokenizer):
+def compare(premise, hypothesis, label, bert, tokenizer, result_path):
     max_cosine = 0
     data = {}
 
@@ -85,31 +100,29 @@ def compare(premise, hypothesis, label, bert, tokenizer):
 
     data['gold_label'] = label
 
-    with open("/home/ulgen/Downloads/split_results/splittled_nli.jsonl", "a") as outfile:
+    with open(configs[result_path] + "splittled_nli.jsonl", "a") as outfile:
         outfile.write(json.dumps(data) + "\n")
 
 
 def main():
-    bert_tf_path = "/media/ulgen/Samsung/contradiction_data/transformers/tf_hub"
-
-    bert_encoder = hub.KerasLayer(handle=bert_tf_path, trainable=False)
+    bert_encoder = hub.KerasLayer(handle=args.bert_tf_hub, trainable=False)
     vocab_file = bert_encoder.resolved_object.vocab_file.asset_path.numpy()
     do_lower_case = bert_encoder.resolved_object.do_lower_case.numpy()
     tokenizer = tokenization.FullTokenizer(vocab_file=vocab_file, do_lower_case=do_lower_case)
 
-    text1, text2, label = read_nli("/media/ulgen/Samsung/contradiction_data/nli_sets/train.jsonl")
+    text1, text2, label = read_nli(path=args.nli_set)
 
     count = 0
 
     for premise, hypothesis, label in zip(text1, text2, label):
-        compare(premise=premise, hypothesis=hypothesis, label=label, bert=bert_encoder, tokenizer=tokenizer)
+        compare(premise=premise, hypothesis=hypothesis, label=label,
+                bert=bert_encoder, tokenizer=tokenizer, result_path=args.result_path)
 
-        count = count + 1
+        count += 1
         if count % 5000 == 0:
             print("processed Sentence:", str(count),
                   "Processed Percentage:", str(round(count / len(text1), 4) * 100))
 
 
-main()
-
-# vocab_file = "/media/ulgen/Samsung/contradiction_data/transformers/bert_tf_hub/assets/vocab.txt"
+if __name__ == "__main__":
+    plac.call(main)
