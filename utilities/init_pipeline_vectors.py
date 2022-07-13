@@ -1,3 +1,11 @@
+"""
+Since 3.1.0 version old init-model approach is moved to init_pipeline.py file.
+This code enables static word vectors to be implemented into spacy NLP object.
+Thus, the NLP analyst can maintain project from one framework by loading embeddings to NLP object.
+For easy manipulation. Args() parameters are re-designed with argparse. Thus enables to use everything
+from top of the script.
+"""
+import argparse
 from typing import Optional
 import logging
 from pathlib import Path
@@ -11,17 +19,33 @@ from spacy.language import Language
 from spacy.cli._util import init_cli, Arg, Opt, parse_config_overrides, show_validation_error
 from spacy.cli._util import import_code, setup_gpu
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--language", type=str, default="en",
+                    help="Keys language of the pretrained vectors, The language of the nlp object to create")
+parser.add_argument("--vectors_location", type=str,
+                    default="/media/ulgen/Samsung/contradiction_data_depo/zips/googlenews_txt_format.zip",
+                    help="Path for the pretrained vectors to be imported")
+parser.add_argument("--output_dir", type=str, default="/media/ulgen/Samsung/contradiction_data/transformers/word2vec/",
+                    help="Path for the imported NLP object")
+parser.add_argument("--prune", type=int, default=1500000,
+                    help="Number of vectors to be pruned. This is an exhaustive approach that assigns semantically"
+                         "similarly keys to same vector")
+parser.add_argument("--name", type=str, default="Word2Vec",
+                    help="Name for the imported vectors. Default use vector source name")
+parser.add_argument("--verbose", type=bool, default=True,
+                    help="Verbosity of the process")
+args = parser.parse_args()
 
-@init_cli.command("vectors")
+
 def init_vectors_cli(
-        lang='en',
-        vectors_loc='/media/ulgen/Samsung/contradiction_data_depo/zips/glove.840B.300d.txt',
-        output_dir='/media/ulgen/Samsung/contradiction_data/transformers/glove/',
-        prune=-1,
-        truncate=0,
-        name='glove',
-        verbose=False,
-        jsonl_loc=None):
+        lang: str = args.language,
+        vectors_loc: Path = args.vectors_location,
+        output_dir: Path = args.output_dir,
+        prune: int = args.prune,
+        truncate: int = 0,
+        name: Optional[str] = args.name,
+        verbose: bool = args.verbose,
+        jsonl_loc: Optional[Path] = None):
     """Convert word vectors for use with spaCy. Will export an nlp object that
     you can use in the [initialize] block of your config to initialize
     a model with vectors.
@@ -34,7 +58,6 @@ def init_vectors_cli(
     convert_vectors(nlp, vectors_loc, truncate=truncate, prune=prune, name=name)
     msg.good(f"Successfully converted {len(nlp.vocab.vectors)} vectors")
     nlp.to_disk(output_dir)
-    print("vector initialization is completed and saved to->", output_dir)
 
 
 def update_lexemes(nlp: Language, jsonl_loc: Path) -> None:
@@ -103,6 +126,10 @@ def init_labels_cli(
         config = util.load_config(config_path, overrides=overrides)
     with show_validation_error(hint_fill=False):
         nlp = init_nlp(config, use_gpu=use_gpu)
+    _init_labels(nlp, output_path)
+
+
+def _init_labels(nlp, output_path):
     for name, component in nlp.pipeline:
         if getattr(component, "label_data", None) is not None:
             output_file = output_path / f"{name}.json"
