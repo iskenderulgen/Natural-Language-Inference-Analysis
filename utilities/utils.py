@@ -8,7 +8,6 @@ import en_core_web_lg
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import plac
 import seaborn as sns
 import spacy
 import tensorflow as tf
@@ -16,7 +15,6 @@ import yaml
 from gensim.models import KeyedVectors
 from tensorflow.keras.utils import to_categorical
 
-"""Pandas show non-truncated results"""
 pd.option_context('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_colwidth', None)
@@ -27,32 +25,28 @@ LABELS = {"entailment": 0, "contradiction": 1, "neutral": 2}
 
 def set_memory_growth():
     """
-    This function sets memory growth for tensorflow. With TF2, it is optimized to use graphic memory efficiently.
-    TF2 only allocates the required size and releases the rest.
+    Below config sets the optimized graphic memory usage. With TF2, memory can be allocated based on the computational
+    load and releases the rest.
     :return: None
     """
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        try:
-            # Currently, memory growth needs to be the same across GPUs
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-        except RuntimeError as e:
-            # Memory growth must be set before GPUs have been initialized
-            print(e)
+    physical_devices = tf.config.list_physical_devices('GPU')
+    try:
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        print(len(physical_devices), "Physical GPUs,", len(physical_devices), "Logical GPUs")
+    except RuntimeError as e:
+        print(e, "Invalid device or cannot modify virtual devices once initialized.")
+        pass
 
 
 def load_configurations():
     """
-    Loads the configuration yaml file that contains all the paths and neural network parameters. Majority of the
-    settings are handled in configuration yaml file. This enables single centralized control over parameters and paths.
-    :return: returns configurations.
+    Loads the YAML file that contains paths and neural network parameters.
+    This enables single centralized control over parameters and paths.
+    :return: configurations from YAML file.
     """
-    with open("/home/ulgen/Documents/python_projects/Contradiction/configurations.yaml", 'r') as stream:
+    with open("../configurations.yaml", 'r') as file_:
         try:
-            configurations = (yaml.safe_load(stream))
+            configurations = (yaml.safe_load(file_))
         except yaml.YAMLError as exc:
             print(exc)
 
@@ -61,9 +55,9 @@ def load_configurations():
 
 def read_nli(path):
     """
-    Reads the NLI dataset from the given path
-    :param path: path of the NLI dataset
-    :return: returns the NLI data as list of texts.
+    Parses the SNLI dataset into sentences and target labels from JSONL file format
+    :param path: SNLI dataset path.
+    :return: parsed SNLI dataset.
     """
     texts1 = []
     texts2 = []
@@ -78,15 +72,15 @@ def read_nli(path):
             texts2.append(nli_data["sentence2"])
             labels.append(LABELS[label])
 
-    print("NLI dataset loaded")
+    print("NLI dataset read and parsed.")
     return texts1, texts2, to_categorical(np.asarray(labels, dtype="int32"))
 
 
-def read_test_json(path):
+def read_test_data(path):
     """
-    Reads the real life test dataset from the given path
-    :param path: path of the NLI dataset
-    :return: returns the NLI data as list of texts.
+    Reads the non-labeled test data. Any test dataset file format must be reformatted into SNLI JsonL format beforehand
+    :param path: path to the test dataset.
+    :return: parsed test dataset.
     """
     texts1 = []
     texts2 = []
@@ -96,297 +90,148 @@ def read_test_json(path):
             texts1.append(nli_data["premise"])
             texts2.append(nli_data["hypothesis"])
 
-    print("NLI dataset loaded")
+    print("NLI test dataset read and parsed.")
     return texts1, texts2
 
 
 def load_spacy_nlp(configs, transformer_type):
     """
-    Loads spacy based NLP object which converts raw text into ids of tokens. Currently this project supports three
-    types of NLP embeddings objects. Glove - Fasttext - Word2Vec
-    :param configs: path of the transformer object.
+    Loads spacy NLP object that converts words to id of token. Currently, this project supports three types of NLP
+    embeddings objects. Glove - Fasttext - Word2Vec
+    :param configs: path of the transformer object
     :param transformer_type: type definition of the transformer.
-    :return: returns NLP object.
+    :return: Spacy NLP object.
     """
+
+    pipelines = ['parser', 'tagger', 'ner', 'textcat', 'lemmatizer', 'attribute_ruler', 'tok2vec']
 
     if transformer_type == 'ontonotes5':
         print("Loading", transformer_type, "NLP object")
-        nlp = en_core_web_lg.load(disable=['parser', 'tagger', 'ner', 'textcat', 'lemmatizer',
-                                           'attribute_ruler', 'tok2vec'])
+        nlp = en_core_web_lg.load(disable=pipelines)
     else:
         print(transformer_type, "NLP object is loaded")
-        nlp = spacy.load(configs[transformer_type], disable=['parser', 'tagger', 'ner', 'textcat', 'lemmatizer',
-                                                             'attribute_ruler', 'tok2vec'])
-    """shows the unique vector size/count."""
-    # print(transformer_type, "unique vector size / count", len(nlp.vocab.vectors))
+        nlp = spacy.load(configs[transformer_type], disable=pipelines)
+
+    print(transformer_type, "unique vector size / count", len(nlp.vocab.vectors))
+
     return nlp
 
 
-def attention_visualization(tokens1, tokens2, attention1, attention2, results_path, transformer_type):
+def attention_visualization(premise, hypothesis, premise_weights, hypothesis_weights, results_path, transformer_type):
     """
-    Function to draw attention heatmap of the prediction scores. Takes two sentence tokens and their attention values
-    corresponding to their tokens. Dot products the scores to achieve attention scores and draws them to a graph.
-    Note that it only takes the real tokens and their attention values not the padded scores.
-    :param tokens1: tokens of the sentence one.
-    :param tokens2: tokens of the sentence two.
-    :param attention1: attention scores of the first sentence.
-    :param attention2: attention scores of the second sentence.
-    :param results_path: result path where the heatmap will be saved.
-    :param transformer_type: type of the NLP transformer.
-    :return: None.
+    Draws attention heatmap of the tokens associated with corresponding weights that are extracted from the last layer
+    of network. Thus, visualizes that how the network predicts the final label
+    :param premise: words of the premise sentence
+    :param hypothesis: words of the hypothesis sentence
+    :param premise_weights: word weights of the premise sentence
+    :param hypothesis_weights: word weights of the hypothesis
+    :param results_path: path where the plotted attention map will be saved
+    :param transformer_type: indicates NLP model used to calculate weights
+    :return: None
     """
-    sentence1_length = len(tokens1)
-    sentence2_length = len(tokens2)
 
+    premise_length = len(premise)
+    hypothesis_length = len(hypothesis)
     attentions_scores = []
 
-    for i in attention1[0][:sentence1_length]:
-        for j in attention2[0][:sentence2_length]:
+    for i in premise_weights[0][:premise_length]:
+        for j in hypothesis_weights[0][:hypothesis_length]:
             attentions_scores.append(np.dot(i, j))
     attentions_scores = np.asarray(attentions_scores) / np.sum(attentions_scores)
 
     plt.subplots(figsize=(20, 20))
+    ax = sns.heatmap(attentions_scores.reshape((premise_length, hypothesis_length)),
+                     linewidths=0.5,
+                     annot=True,
+                     cbar=True,
+                     cmap="Blues")
 
-    ax = sns.heatmap(attentions_scores.reshape((sentence1_length, sentence2_length)), linewidths=0.5, annot=True,
-                     cbar=True, cmap="Blues")
-
-    ax.set_yticklabels([i for i in tokens1])
+    ax.set_yticklabels([i for i in premise])
     plt.yticks(rotation=0)
-    ax.set_xticklabels([j for j in tokens2])
+    ax.set_xticklabels([j for j in hypothesis])
     plt.xticks(rotation=90)
-    plt.title("attention visualized with " + transformer_type)
+    plt.title("attention heatmap visualized with " + transformer_type)
     fig1 = plt.gcf()
     plt.show()
     plt.draw()
-    fig1.savefig(results_path + 'attention_graph.png')
+    fig1.savefig(results_path + transformer_type + '_attention_graph.png')
 
 
-def predictions_to_html(nli_type, premises, hypothesises, prediction, contradiction_score, neutral_score,
-                        entailment_score, result_path):
+def predictions_to_excel(nli_type, premises, hypothesises, prediction, contradiction_score, neutral_score,
+                         entailment_score, result_path):
     """
-    Writes the prediction results to html file as table. This method provides easy to see approach for test results.
-    Takes premise - hypothesis and their prediction label along with scores for each label.
-    :param nli_type: Definition of the NLI train set which the model trained on.
-    :param premises: opinion sentence
-    :param hypothesises: opinion sentence
-    :param prediction: predicted label of the given premise and hypothesis sentences.
-    :param contradiction_score: contradiction score of the predicted label.
-    :param neutral_score: neutral score of the predicted label.
-    :param entailment_score: entailment score of the predicted label.
-    :param result_path: path where the html file will be saved.
-    :return: None.
+    Writes prediction dataset to Excel file alongside with its predictions scores across each label. Each text pair
+    is presented with prediction scores across each label. Thus, provides easy access for analyst to inspect results
+    :param nli_type: indicates NLI dataset type such as SNLI - MNLI - ANLI or merged NLI set
+    :param premises: premise texts
+    :param hypothesises: hypothesis texts
+    :param prediction: prediction label as in text
+    :param contradiction_score: contradiction score of the text pair
+    :param neutral_score: neutral score of the text pair
+    :param entailment_score: entailment score of the text pair
+    :param result_path: path where the Excel file will be saved
+    :return: None
     """
-    premises.append("### last prediction result corresponds total amount of data. ###")
-    hypothesises.append("### last row corresponds to total amount of each type of predicted label. ###")
 
-    predictions_df = pd.DataFrame(
+    pd.DataFrame(
         data={'premise': premises,
               'hypothesis': hypothesises,
               nli_type + ' model prediction': prediction,
               nli_type + ' model contradiction score': contradiction_score,
               nli_type + ' model neutral score': neutral_score,
               nli_type + ' model entailment score': entailment_score}
-    )
-    # html = predictions_df.to_html(float_format=lambda x: ('%.3f' % x) * 100)
-    html = predictions_df.to_html()
-    text_file = open(result_path + nli_type + ".html", "w")
-    text_file.write(html)
-    text_file.close()
+    ).to_excel(result_path + nli_type + "_prediction_results.xlsx", index=False)
 
 
-def merge_result_html_files(path_of_the_files):
+# TO - DO build iterate Excel file merger. keep premise - hypothesis as index and merge all prediction information
+# from different excel prediction files and provide cumulitive result.
+
+
+def xml_data_to_json(path1, path2):
     """
-    This function merges the result html files. This is suitable to compare models that are trained on different train
-    sets. Train data can be different or combination of train sets. Merging result files give researcher the better
-    insights about how the model behaves when trained on different train sets. Eg. model architecture is ESIM and train
-    sets can be snli, snli-mnli, anli etc. Best use-case is making predictions using different models on same test data
-    thus gives better understanding how different model behaves on same test data.
-    :param path_of_the_files: path of the results to be merges.
-    :return: None
-    """
-    dataframes = []
-
-    for file in (glob.glob(path_of_the_files + "/" + "*.html")):
-        df_set_definer = (Path(file).parts[-1].split('.')[0])
-
-        premise = []
-        hypothesis = []
-
-        prediction = []
-        contradiction = []
-        neutral = []
-        entailment = []
-
-        df = pd.read_html(file)
-        for line in range(len(df[0])):
-            premise.append(str(df[0]['premises'][line]))
-            hypothesis.append(str(df[0]['hypothesises'][line]))
-
-            prediction.append(df[0][df_set_definer + ' prediction'][line])
-            contradiction.append(df[0][df_set_definer + ' contradiction score'][line])
-            neutral.append(df[0][df_set_definer + ' neutral score'][line])
-            entailment.append(df[0][df_set_definer + ' entailment score'][line])
-
-        df = pd.DataFrame(
-            data={'premises': premise,
-                  'hypothesises': hypothesis,
-
-                  df_set_definer + ' prediction': prediction,
-                  df_set_definer + ' entailment score': entailment,
-                  df_set_definer + ' contradiction score': contradiction,
-                  df_set_definer + ' neutral score': neutral,
-                  }
-        )
-
-        dataframes.append(df)
-
-    concatenated_df = pd.concat([df.set_index(['premises', 'hypothesises']) for df in dataframes],
-                                axis=1).reset_index().to_html()
-    text_file = open(path_of_the_files + "/merged_results.html", "w")
-    text_file.write(concatenated_df)
-    text_file.close()
-
-
-def find_differences(html_results_main_path, df1_set_definer, df2_set_definer, df3_set_definer):
-    """
-
-    TO DO: Automatize this function so that it can work regardless of the given input size
-
-    This function is hard coded and doesn't provide any modular structure. This function will be reworked to provide
-    comparison regardless of the dataframe size. Right now this function provides result only for three different
-    result files.
-    :param html_results_main_path: main path of the html results that will be compared.
-    :param df1_set_definer: train set definition of the model that predicted the results.
-    :param df2_set_definer: train set definition of the model that predicted the results.
-    :param df3_set_definer: train set definition of the model that predicted the results.
-    :return: None
-    """
-    df1 = pd.read_html(html_results_main_path + "/" + df1_set_definer + ".html")
-    df2 = pd.read_html(html_results_main_path + "/" + df2_set_definer + ".html")
-    df3 = pd.read_html(html_results_main_path + "/" + df3_set_definer + ".html")
-
-    premises = []
-    hypothesis = []
-
-    df1_prediction = []
-    df1_entailment = []
-    df1_contradiction = []
-    df1_neutral = []
-
-    df2_prediction = []
-    df2_entailment = []
-    df2_contradiction = []
-    df2_neutral = []
-
-    df3_prediction = []
-    df3_entailment = []
-    df3_contradiction = []
-    df3_neutral = []
-
-    for i in range(len(df1[0])):
-        if (str(df1[0][df1_set_definer + ' prediction'][i]) != str(df2[0][df2_set_definer + ' prediction'][i]) or
-                str(df1[0][df1_set_definer + ' prediction'][i]) != str(df3[0][df3_set_definer + ' prediction'][i]) or
-                str(df2[0][df2_set_definer + ' prediction'][i]) != str(df3[0][df3_set_definer + ' prediction'][i])):
-            premises.append(str(df1[0]['premise'][i]))
-            hypothesis.append(str(df1[0]['hypothesis'][i]))
-
-            df1_prediction.append(df1[0][df1_set_definer + ' prediction'][i])
-            df1_contradiction.append(df1[0][df1_set_definer + ' contradiction score'][i])
-            df1_neutral.append(df1[0][df1_set_definer + ' neutral score'][i])
-            df1_entailment.append(df1[0][df1_set_definer + ' entailment score'][i])
-
-            df2_prediction.append(df2[0][df2_set_definer + ' prediction'][i])
-            df2_contradiction.append(df2[0][df2_set_definer + ' contradiction score'][i])
-            df2_neutral.append(df2[0][df2_set_definer + ' neutral score'][i])
-            df2_entailment.append(df2[0][df2_set_definer + ' entailment score'][i])
-
-            df3_prediction.append(df3[0][df3_set_definer + ' anli prediction'][i])
-            df3_contradiction.append(df3[0][df3_set_definer + ' contradiction score'][i])
-            df3_neutral.append(df3[0][df3_set_definer + ' neutral score'][i])
-            df3_entailment.append(df3[0]['snli mnli anli entailment score'][i])
-
-    merged_df = pd.DataFrame(
-        data={'premise': premises,
-              'hypothesis': hypothesis,
-
-              df1_set_definer + ' prediction': df1_prediction,
-              df1_set_definer + ' entailment score': df1_entailment,
-              df1_set_definer + ' contradiction score': df1_contradiction,
-              df1_set_definer + ' neutral score': df1_neutral,
-
-              df2_set_definer + ' multiclass prediction': df2_prediction,
-              df2_set_definer + ' entailment score': df2_entailment,
-              df2_set_definer + ' contradiction score': df2_contradiction,
-              df2_set_definer + ' neutral score': df2_neutral,
-
-              df3_set_definer + ' multiclass prediction': df3_prediction,
-              df3_set_definer + ' entailment score': df3_entailment,
-              df3_set_definer + ' contradiction score': df3_contradiction,
-              df3_set_definer + ' neutral score': df3_neutral})
-
-    html = merged_df.to_html()
-    text_file = open(html_results_main_path + "/differences.html", "w")
-    text_file.write(html)
-    text_file.close()
-
-
-def xml_data_extractor(path, arg_number):
-    """
-    Reads the XML file and extracts the desired data.
-    :param path: path of the XML file.
-    :param arg_number: XML root-tree argument number parameter.
-    :return: argument text data
-    """
-    tree = ET.parse(path)
-    root = tree.getroot()
-    arg_text = []
-    for item in root.findall('annotatedArgumentPair/' + arg_number):
-        text = item.find('text').text
-        arg_text.append(str(text).replace("\n", " "))
-
-    return arg_text
-
-
-def xml_data_to_json(path1, path2, nli_type):
-    """
-    Creates NLI unlabeled test JSONL data. Original data acquired from the research named:
-    'What makes a convincing argument? Empirical analysis and
-     detecting attributes of convincingness in Web argumentation'
-     Data is paired opinion sentences around 16 types of topic. It can present contradiction and entailment pairs
-     based on the selection of the data.
+    Creates NLI formatted data from the research "DOI:10.18653/v1/D16-1129" that has opinionated sentences around 16
+    topics as text pairs
     :param path1: path of the data that contains topic1's sentences.
     :param path2: path of the data that contains topic2's sentences
-    :param nli_type: Contradiction or Entailment. Extracted sentences will be utilized based on this selection in
-    order to provide whether 'contradiction' or 'entailment' based unlabeled test data.
     :return: None
     """
+
+    def xml_data_extractor(path, arg_number):
+        """
+        Reads the XML file format and extracts text pair information
+        :param path: path to the XML file
+        :param arg_number: argument number
+        :return: parsed text data.
+        """
+        tree = ET.parse(path)
+        root = tree.getroot()
+        arg_text = []
+        for item in root.findall('annotatedArgumentPair/' + arg_number):
+            text = item.find('text').text
+            arg_text.append(str(text).replace("\n", " "))
+
+        return arg_text
 
     path = ('/'.join(Path(path1).parts[:-1]) + '/new_' + nli_type + '.jsonl')
 
-    topic1_arg1_text = xml_data_extractor(path=path1, arg_number='arg1')
-    topic1_arg2_text = xml_data_extractor(path=path1, arg_number='arg2')
+    topic1_arg1_text = set(xml_data_extractor(path=path1, arg_number='arg1'))
+    topic1_arg2_text = set(xml_data_extractor(path=path1, arg_number='arg2'))
 
-    topic2_arg1_text = xml_data_extractor(path=path2, arg_number='arg1')
-    topic2_arg2_text = xml_data_extractor(path=path2, arg_number='arg2')
+    topic2_arg1_text = set(xml_data_extractor(path=path2, arg_number='arg1'))
+    topic2_arg2_text = set(xml_data_extractor(path=path2, arg_number='arg2'))
 
-    if nli_type == 'entailment':
+    a = list(itertools.product(topic1_arg1_text, topic1_arg2_text))
 
-        with open(path, "w") as outfile:
-            entailment_premises = topic1_arg1_text + topic2_arg1_text
-            entailment_hypothesises = topic1_arg2_text + topic2_arg2_text
+    premise = [line[0] for line in a]
+    hypothesis = [line[1] for line in a]
 
-            for text1, text2 in zip(entailment_premises, entailment_hypothesises):
-                data = {'premise': text1, 'hypothesis': text2}
-                outfile.write(json.dumps(data) + "\n")
+    entailment_df = pd.DataFrame(data={'premise': premise,
+                                       'hypothesis': hypothesis,
+                                       'label': 'entailment'})
 
-    else:
-        with open(path, "w") as outfile:
-            contradiction_premises = topic1_arg1_text + topic1_arg2_text
-            contradiction_hypothesises = topic2_arg1_text + topic2_arg2_text
-
-            for text1, text2 in zip(contradiction_premises, contradiction_hypothesises):
-                data = {'premise': text1, 'hypothesis': text2}
-                outfile.write(json.dumps(data) + "\n")
+    entailment_df = pd.DataFrame(data={'premise': [topic1_arg1_text, topic2_arg1_text],
+                                       'hypothesis': [topic1_arg2_text, topic2_arg2_text],
+                                       'label': 'entailment'})
 
 
 def write_nli_to_disk(data, nli_set_path, nli_definition):
@@ -573,13 +418,13 @@ def main():
     # convert_bin_word2vec_to_tex(
     #     path="/media/ulgen/Samsung/contradiction_data_depo/zips/GoogleNews-vectors-negative300.bin")
 
-
     xml_data_to_json(path1="/media/ulgen/Samsung/contradiction_data/results/evolution-vs-creation_evolution.xml",
                      path2="/media/ulgen/Samsung/contradiction_data/results/evolution-vs-creation_creation.xml",
                      nli_type="entailment")
 
+
 if __name__ == "__main__":
-    plac.call(main)
+    main()
 
 """
 
