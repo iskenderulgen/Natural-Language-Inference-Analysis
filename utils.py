@@ -1,18 +1,32 @@
 import json
 import pandas as pd
-import os
-
+import numpy as np
+from tqdm.notebook import tqdm
+import torch
 
 def load_nli_data(file_path):
     """
-    Load and filter NLI data from a JSONL file
+    Load Natural Language Inference (NLI) data from a JSON file and format it into a pandas DataFrame.
 
-    Args:
-        file_path: Path to the NLI JSONL file
+    This function reads each line of the file as a JSON object, creates a DataFrame,
+    filters out examples with '-' gold labels, maps text labels to integers
+    (entailment: 0, contradiction: 1, neutral: 2), and retains only the relevant columns.
 
-    Returns:
-        A filtered pandas DataFrame with sentence1, sentence2, and label columns
+    Parameters
+    ----------
+    file_path : str
+        The path to the JSON file containing NLI data
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame containing the processed NLI data with columns:
+        - sentence1: The premise text
+        - sentence2: The hypothesis text
+        - label: Integer label (0: entailment, 1: contradiction, 2: neutral)
+        - gold_label: Original string label
     """
+
     data = []
     with open(file_path) as f:
         for line in f:
@@ -34,11 +48,184 @@ def load_nli_data(file_path):
     return df
 
 
+def tokenize_to_ids(texts, nlp, max_length=64, nr_unk=100):
+    """
+    Tokenize a list of texts into integer IDs using spaCy.
+
+    This function converts texts into fixed-length sequences of token IDs that can be used for model input.
+    Each token is either mapped to its corresponding row index in the embedding matrix (if it has a vector)
+    or to a hash-based ID in a reserved range for unknown tokens.
+
+    Parameters
+    ----------
+    texts : list of str
+        List of text strings to tokenize.
+
+    nlp : spacy.Language
+        Loaded spaCy language model with word vectors.
+
+    max_length : int, default=64
+        Maximum length of each tokenized sequence. Longer sequences are truncated
+        and shorter ones are padded with zeros.
+
+    nr_unk : int, default=100
+        Number of reserved IDs for unknown tokens. Unknown tokens are assigned
+        IDs from 1 to nr_unk based on a hash of their text.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of shape (len(texts), max_length) containing token IDs for each text.
+        Known tokens have IDs >= nr_unk + 1, unknown tokens have IDs between 1 and nr_unk,
+        and padding has ID 0.
+
+    Notes
+    -----
+    - Token IDs are assigned as follows:
+      - 0: padding token
+      - 1 to nr_unk: unknown tokens (based on hash)
+      - nr_unk+1 and above: known tokens with vectors
+    """
+
+    vec_key2row = nlp.vocab.vectors.key2row  # dict: lex_id -> row_index
+    all_ids = np.zeros((len(texts), max_length), dtype=np.int32)
+
+    for i, doc in enumerate(
+        tqdm(nlp.pipe(texts, n_process=-1), total=len(texts), desc="Tokenizing")
+    ):
+        seq_ids = []
+        for token in doc[:max_length]:
+            row = vec_key2row.get(token.orth)
+            if row is not None and token.vector_norm > 0:
+                seq_ids.append(row + nr_unk + 1)
+            else:
+                seq_ids.append(1 + (hash(token.text) % nr_unk))
+
+        # pad/truncate
+        arr = np.zeros(max_length, dtype=np.int32)
+        arr[: len(seq_ids)] = seq_ids
+        all_ids[i] = arr
+
+    return all_ids
+
+
+def get_embeddings_spacy(nlp, nr_unk=100):
+    """
+    Extract word embeddings from a spaCy language model and initialize the embedding matrix.
+
+    Parameters
+    ----------
+    nlp : spacy.language.Language
+        A loaded spaCy language model containing word vectors
+    nr_unk : int, default=100
+        Number of random vectors to generate for out-of-vocabulary (OOV) words
+
+    Returns
+    -------
+    numpy.ndarray
+        A matrix of shape (vocabulary_size + nr_unk + 1, embedding_dim) containing:
+        - Index 0: reserved (zeros)
+        - Indices 1 to nr_unk: random unit-norm vectors for OOV words
+        - Remaining indices: word vectors from the spaCy model's vocabulary
+
+    Notes
+    -----
+    The embedding matrix is initialized with zeros, then populated with random
+    unit-normalized vectors for OOV tokens, followed by the pre-trained word
+    vectors from the spaCy model.
+    """
+
+    vecs = nlp.vocab.vectors
+    n_rows, dim = vecs.shape
+    total = 1 + nr_unk + n_rows
+
+    # init
+    emb = np.zeros((total, dim), dtype="float32")
+
+    # random OOV vectors (unit‑norm)
+    oov = np.random.normal(size=(nr_unk, dim)).astype("float32")
+    oov /= np.linalg.norm(oov, axis=1, keepdims=True)
+    emb[1 : nr_unk + 1] = oov
+
+    # copy spaCy vectors
+    for lex_id, row in vecs.key2row.items():
+        emb[nr_unk + 1 + row] = vecs.data[row]
+
+    return emb
+
+
+def compute_lengths(x):
+    # count non-zero tokens per row
+    return (x != 0).sum(dim=1)
+
+
+def evaluate(model, loader, crit, device, return_loss=False):
+    """
+    Evaluate a model's performance on a dataset.
+    
+    This function runs the model in evaluation mode and computes accuracy and,
+    optionally, the loss on a dataset. It processes batches from the data loader,
+    computes sequence lengths for premises and hypotheses, and tracks correct
+    predictions.
+    
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The neural network model to evaluate
+    loader : torch.utils.data.DataLoader
+        DataLoader providing batches of data in the format (premise, hypothesis, label)
+    crit : torch.nn.Module
+        Loss criterion (e.g., CrossEntropyLoss) for computing the loss if return_loss is True
+    device : torch.device
+        Device to run the evaluation on (e.g., 'cuda' or 'cpu')
+    return_loss : bool, default=False
+        If True, returns both the average loss and accuracy.
+        If False, returns only the accuracy.
+
+    Returns
+    -------
+    float or tuple
+        If return_loss is True, returns a tuple (avg_loss, accuracy).
+        If return_loss is False, returns only the accuracy.
+        Accuracy is the proportion of correctly classified samples.
+    """
+    model.eval()
+    total_loss = 0
+    total_correct = 0
+    total_samples = 0
+
+    with torch.no_grad():
+        for x1, x2, y in loader:
+            x1, x2, y = x1.to(device), x2.to(device), y.to(device)
+            l1, l2 = compute_lengths(x1), compute_lengths(x2)
+            logits = model(x1, l1, x2, l2)
+            preds = logits.argmax(1)
+            total_correct += (preds == y).sum().item()
+            total_samples += y.size(0)
+            if return_loss:
+                loss = crit(logits, y)
+                total_loss += loss.item() * y.size(0)
+
+    accuracy = total_correct / total_samples
+    if return_loss:
+        return total_loss / total_samples, accuracy
+    return accuracy
+
+
+###################################################################33
 
 
 # TODO: Clean the following codes
-def predictions_to_excel(nli_type, premises, hypothesises, prediction, contradiction_score, neutral_score,
-                         entailment_score, result_path):
+def predictions_to_excel(
+    nli_type,
+    premises,
+    hypothesises,
+    prediction,
+    contradiction_score,
+    neutral_score,
+    entailment_score,
+    result_path,
+):
     """
     Writes prediction dataset to Excel file alongside with its predictions scores across each label. Each text pair
     is presented with prediction scores across each label. Thus, provides easy access for analyst to inspect results
@@ -54,15 +241,15 @@ def predictions_to_excel(nli_type, premises, hypothesises, prediction, contradic
     """
 
     pd.DataFrame(
-        data={'premise': premises,
-              'hypothesis': hypothesises,
-              nli_type + ' model prediction': prediction,
-              nli_type + ' model contradiction score': contradiction_score,
-              nli_type + ' model neutral score': neutral_score,
-              nli_type + ' model entailment score': entailment_score}
+        data={
+            "premise": premises,
+            "hypothesis": hypothesises,
+            nli_type + " model prediction": prediction,
+            nli_type + " model contradiction score": contradiction_score,
+            nli_type + " model neutral score": neutral_score,
+            nli_type + " model entailment score": entailment_score,
+        }
     ).to_excel(result_path + nli_type + "_prediction_results.xlsx", index=False)
-
-
 
 
 def xml_data_to_json(path1, path2):
@@ -84,33 +271,36 @@ def xml_data_to_json(path1, path2):
         tree = ET.parse(path)
         root = tree.getroot()
         arg_text = []
-        for item in root.findall('annotatedArgumentPair/' + arg_number):
-            text = item.find('text').text
+        for item in root.findall("annotatedArgumentPair/" + arg_number):
+            text = item.find("text").text
             arg_text.append(str(text).replace("\n", " "))
 
         return arg_text
 
-    path = ('/'.join(Path(path1).parts[:-1]) + '/new_' + nli_type + '.jsonl')
+    path = "/".join(Path(path1).parts[:-1]) + "/new_" + nli_type + ".jsonl"
 
-    topic1_arg1_text = set(xml_data_extractor(path=path1, arg_number='arg1'))
-    topic1_arg2_text = set(xml_data_extractor(path=path1, arg_number='arg2'))
+    topic1_arg1_text = set(xml_data_extractor(path=path1, arg_number="arg1"))
+    topic1_arg2_text = set(xml_data_extractor(path=path1, arg_number="arg2"))
 
-    topic2_arg1_text = set(xml_data_extractor(path=path2, arg_number='arg1'))
-    topic2_arg2_text = set(xml_data_extractor(path=path2, arg_number='arg2'))
+    topic2_arg1_text = set(xml_data_extractor(path=path2, arg_number="arg1"))
+    topic2_arg2_text = set(xml_data_extractor(path=path2, arg_number="arg2"))
 
     a = list(itertools.product(topic1_arg1_text, topic1_arg2_text))
 
     premise = [line[0] for line in a]
     hypothesis = [line[1] for line in a]
 
-    entailment_df = pd.DataFrame(data={'premise': premise,
-                                       'hypothesis': hypothesis,
-                                       'label': 'entailment'})
+    entailment_df = pd.DataFrame(
+        data={"premise": premise, "hypothesis": hypothesis, "label": "entailment"}
+    )
 
-    entailment_df = pd.DataFrame(data={'premise': [topic1_arg1_text, topic2_arg1_text],
-                                       'hypothesis': [topic1_arg2_text, topic2_arg2_text],
-                                       'label': 'entailment'})
-    
+    entailment_df = pd.DataFrame(
+        data={
+            "premise": [topic1_arg1_text, topic2_arg1_text],
+            "hypothesis": [topic1_arg2_text, topic2_arg2_text],
+            "label": "entailment",
+        }
+    )
 
 
 def anli_to_snli(nli_set_path, nli_definition):
@@ -137,7 +327,9 @@ def anli_to_snli(nli_set_path, nli_definition):
                 data["gold_label"] = "entailment"
             total_data.append(data)
 
-    write_nli_to_disk(data=total_data, nli_set_path=nli_set_path, nli_definition=nli_definition)
+    write_nli_to_disk(
+        data=total_data, nli_set_path=nli_set_path, nli_definition=nli_definition
+    )
 
 
 def mnli_to_snli(nli_set_path):
@@ -163,46 +355,12 @@ def mnli_to_snli(nli_set_path):
             data["gold_label"] = str(eg["gold_label"])
             total_data.append(data)
 
-    write_nli_to_disk(data=total_data[0:10000], nli_set_path=nli_set_path, nli_definition="test")
-    write_nli_to_disk(data=total_data[10000:20000], nli_set_path=nli_set_path, nli_definition="dev")
-    write_nli_to_disk(data=total_data[20000:], nli_set_path=nli_set_path, nli_definition="train")
-
-
-def attention_visualization(premise, hypothesis, premise_weights, hypothesis_weights, results_path, transformer_type):
-    """
-    Draws attention heatmap of the tokens associated with corresponding weights that are extracted from the last layer
-    of network. Thus, visualizes that how the network predicts the final label
-    :param premise: words of the premise sentence
-    :param hypothesis: words of the hypothesis sentence
-    :param premise_weights: word weights of the premise sentence
-    :param hypothesis_weights: word weights of the hypothesis
-    :param results_path: path where the plotted attention map will be saved
-    :param transformer_type: indicates NLP model used to calculate weights
-    :return: None
-    """
-
-    premise_length = len(premise)
-    hypothesis_length = len(hypothesis)
-    attentions_scores = []
-
-    for i in premise_weights[0][:premise_length]:
-        for j in hypothesis_weights[0][:hypothesis_length]:
-            attentions_scores.append(np.dot(i, j))
-    attentions_scores = np.asarray(attentions_scores) / np.sum(attentions_scores)
-
-    plt.subplots(figsize=(20, 20))
-    ax = sns.heatmap(attentions_scores.reshape((premise_length, hypothesis_length)),
-                     linewidths=0.5,
-                     annot=True,
-                     cbar=True,
-                     cmap="Blues")
-
-    ax.set_yticklabels([i for i in premise])
-    plt.yticks(rotation=0)
-    ax.set_xticklabels([j for j in hypothesis])
-    plt.xticks(rotation=90)
-    plt.title("attention heatmap visualized with " + transformer_type)
-    fig1 = plt.gcf()
-    plt.show()
-    plt.draw()
-    fig1.savefig(results_path + transformer_type + '_attention_graph.png')
+    write_nli_to_disk(
+        data=total_data[0:10000], nli_set_path=nli_set_path, nli_definition="test"
+    )
+    write_nli_to_disk(
+        data=total_data[10000:20000], nli_set_path=nli_set_path, nli_definition="dev"
+    )
+    write_nli_to_disk(
+        data=total_data[20000:], nli_set_path=nli_set_path, nli_definition="train"
+    )
