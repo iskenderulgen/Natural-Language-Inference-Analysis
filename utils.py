@@ -4,6 +4,9 @@ import numpy as np
 from tqdm.notebook import tqdm
 import torch
 
+label_encoding = {"entailment": 0, "contradiction": 1, "neutral": 2}
+
+
 def load_nli_data(file_path):
     """
     Load Natural Language Inference (NLI) data from a JSON file and format it into a pandas DataFrame.
@@ -38,11 +41,61 @@ def load_nli_data(file_path):
     df = df[df["gold_label"] != "-"]
 
     # Map labels to integers
-    df["label"] = df["gold_label"].map(
-        {"entailment": 0, "contradiction": 1, "neutral": 2}
-    )
+    df["label"] = df["gold_label"].map(label_encoding)
 
     # Keep only relevant columns
+    df = df[["sentence1", "sentence2", "label", "gold_label"]]
+
+    return df
+
+
+def anli_to_snli(nli_set_path):
+    """
+    Convert the ANLI dataset to SNLI format.
+
+    Reads JSON-lines from nli_set_path, maps ANLI label codes
+    ('e','c','n') to SNLI string labels and integer encodings,
+    writes the result to disk, and returns a DataFrame.
+
+    References
+    ----------
+    https://github.com/facebookresearch/anli
+
+    Parameters
+    ----------
+    nli_set_path : str
+        Path to the ANLI JSONL file.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with columns:
+          - sentence1: premise text
+          - sentence2: hypothesis text
+          - label: integer label (0: entailment, 1: contradiction, 2: neutral)
+          - gold_label: string label
+    """
+    total_data = []
+
+    with open(nli_set_path, "r") as file_:
+        for line in file_:
+            data = {}
+            eg = json.loads(line)
+            data["sentence1"] = str(eg["context"])
+            data["sentence2"] = str(eg["hypothesis"])
+            # map to SNLI string labels
+            if eg["label"] == "n":
+                data["gold_label"] = "neutral"
+            elif eg["label"] == "c":
+                data["gold_label"] = "contradiction"
+            elif eg["label"] == "e":
+                data["gold_label"] = "entailment"
+            # encode integer label
+            data["label"] = label_encoding[data["gold_label"]]
+            total_data.append(data)
+
+    # create DataFrame
+    df = pd.DataFrame(total_data)
     df = df[["sentence1", "sentence2", "label", "gold_label"]]
 
     return df
@@ -162,12 +215,12 @@ def compute_lengths(x):
 def evaluate(model, loader, crit, device, return_loss=False):
     """
     Evaluate a model's performance on a dataset.
-    
+
     This function runs the model in evaluation mode and computes accuracy and,
     optionally, the loss on a dataset. It processes batches from the data loader,
     computes sequence lengths for premises and hypotheses, and tracks correct
     predictions.
-    
+
     Parameters
     ----------
     model : torch.nn.Module
@@ -210,157 +263,3 @@ def evaluate(model, loader, crit, device, return_loss=False):
     if return_loss:
         return total_loss / total_samples, accuracy
     return accuracy
-
-
-###################################################################33
-
-
-# TODO: Clean the following codes
-def predictions_to_excel(
-    nli_type,
-    premises,
-    hypothesises,
-    prediction,
-    contradiction_score,
-    neutral_score,
-    entailment_score,
-    result_path,
-):
-    """
-    Writes prediction dataset to Excel file alongside with its predictions scores across each label. Each text pair
-    is presented with prediction scores across each label. Thus, provides easy access for analyst to inspect results
-    :param nli_type: indicates NLI dataset type such as SNLI - MNLI - ANLI or merged NLI set
-    :param premises: premise texts
-    :param hypothesises: hypothesis texts
-    :param prediction: prediction label as in text
-    :param contradiction_score: contradiction score of the text pair
-    :param neutral_score: neutral score of the text pair
-    :param entailment_score: entailment score of the text pair
-    :param result_path: path where the Excel file will be saved
-    :return: None
-    """
-
-    pd.DataFrame(
-        data={
-            "premise": premises,
-            "hypothesis": hypothesises,
-            nli_type + " model prediction": prediction,
-            nli_type + " model contradiction score": contradiction_score,
-            nli_type + " model neutral score": neutral_score,
-            nli_type + " model entailment score": entailment_score,
-        }
-    ).to_excel(result_path + nli_type + "_prediction_results.xlsx", index=False)
-
-
-def xml_data_to_json(path1, path2):
-    """
-    Creates NLI formatted data from the research "DOI:10.18653/v1/D16-1129" that has opinionated sentences around 16
-    topics as text pairs
-    :param path1: path of the data that contains topic1's sentences.
-    :param path2: path of the data that contains topic2's sentences
-    :return: None
-    """
-
-    def xml_data_extractor(path, arg_number):
-        """
-        Reads the XML file format and extracts text pair information
-        :param path: path to the XML file
-        :param arg_number: argument number
-        :return: parsed text data.
-        """
-        tree = ET.parse(path)
-        root = tree.getroot()
-        arg_text = []
-        for item in root.findall("annotatedArgumentPair/" + arg_number):
-            text = item.find("text").text
-            arg_text.append(str(text).replace("\n", " "))
-
-        return arg_text
-
-    path = "/".join(Path(path1).parts[:-1]) + "/new_" + nli_type + ".jsonl"
-
-    topic1_arg1_text = set(xml_data_extractor(path=path1, arg_number="arg1"))
-    topic1_arg2_text = set(xml_data_extractor(path=path1, arg_number="arg2"))
-
-    topic2_arg1_text = set(xml_data_extractor(path=path2, arg_number="arg1"))
-    topic2_arg2_text = set(xml_data_extractor(path=path2, arg_number="arg2"))
-
-    a = list(itertools.product(topic1_arg1_text, topic1_arg2_text))
-
-    premise = [line[0] for line in a]
-    hypothesis = [line[1] for line in a]
-
-    entailment_df = pd.DataFrame(
-        data={"premise": premise, "hypothesis": hypothesis, "label": "entailment"}
-    )
-
-    entailment_df = pd.DataFrame(
-        data={
-            "premise": [topic1_arg1_text, topic2_arg1_text],
-            "hypothesis": [topic1_arg2_text, topic2_arg2_text],
-            "label": "entailment",
-        }
-    )
-
-
-def anli_to_snli(nli_set_path, nli_definition):
-    """
-    Converts ANLI dataset to SNLI format. anli uses different label structure. this code converts them to SNLI format.
-    anli has 3 dataset named R1 - R2 - R3. To achieve ANLI dataset, use merge function to merge all three sets.
-    :param nli_set_path: path of the nli. this path is used for both existing and new nli set.
-    :param nli_definition: definition of the nli set. 'train' - 'dev' - 'test'.
-    :return: None
-    """
-    total_data = []
-
-    with open(nli_set_path, "r") as file_:
-        for line in file_:
-            data = {}
-            eg = json.loads(line)
-            data["sentence1"] = str(eg["context"])
-            data["sentence2"] = str(eg["hypothesis"])
-            if eg["label"] == "n":
-                data["gold_label"] = "neutral"
-            elif eg["label"] == "c":
-                data["gold_label"] = "contradiction"
-            elif eg["label"] == "e":
-                data["gold_label"] = "entailment"
-            total_data.append(data)
-
-    write_nli_to_disk(
-        data=total_data, nli_set_path=nli_set_path, nli_definition=nli_definition
-    )
-
-
-def mnli_to_snli(nli_set_path):
-    """
-    converts MNLI to SNLI format. MNLI comes with train - dev matched - dev mismatched. Matched comes from train
-    distribution while mismatched comes from unseen data. matched and mismatched has the snli format so we only work
-    on the main dataset of mnli. We extract first 10k examples for test. second 10k examples
-    for dev and rest goes for train. We use matched - mismatched data for evaluation after train.
-    :param nli_set_path: path of the MNLI data.
-    :return: None
-    """
-    total_data = []
-
-    with open(nli_set_path, "r") as file_:
-        for line in file_:
-            data = {}
-            eg = json.loads(line)
-            label = eg["gold_label"]
-            if label == "-":  # ignore - MNLI entries
-                continue
-            data["sentence1"] = str(eg["sentence1"])
-            data["sentence2"] = str(eg["sentence2"])
-            data["gold_label"] = str(eg["gold_label"])
-            total_data.append(data)
-
-    write_nli_to_disk(
-        data=total_data[0:10000], nli_set_path=nli_set_path, nli_definition="test"
-    )
-    write_nli_to_disk(
-        data=total_data[10000:20000], nli_set_path=nli_set_path, nli_definition="dev"
-    )
-    write_nli_to_disk(
-        data=total_data[20000:], nli_set_path=nli_set_path, nli_definition="train"
-    )
